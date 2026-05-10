@@ -24,7 +24,10 @@
               <td class="px-4 py-3 text-xs text-ink-500">{{ p.region || '—' }} · {{ p.ip_pool || 'shared' }}</td>
               <td class="px-4 py-3 text-xs text-ink-500 font-mono">{{ p.credentials_secret_name || '—' }}</td>
               <td class="px-4 py-3"><span class="chip" :class="p.is_active ? 'bg-accent-500/10 text-accent-500' : 'bg-ink-100 text-ink-700'">{{ p.is_active ? 'active' : 'disabled' }}</span></td>
-              <td class="px-4 py-3 text-right"><button @click="edit(p)" class="btn-secondary !py-1 !text-xs">Edit</button></td>
+              <td class="px-4 py-3 text-right space-x-2">
+                <button @click="testSend(p)" :disabled="testing === p.id" class="btn-ghost !py-1 !text-xs">{{ testing === p.id ? 'Sending...' : 'Test send' }}</button>
+                <button @click="edit(p)" class="btn-secondary !py-1 !text-xs">Edit</button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -68,6 +71,7 @@ const workspaces = ref<any[]>([])
 const filterWs = ref('')
 const open = ref(false)
 const editing = ref<any>(null)
+const testing = ref<string>('')
 const form = reactive<any>({ workspace_id: '', provider: 'ses', stream: 'bulk', region: 'us-east-1', ip_pool: '', credentials_secret_name: '', is_active: true, config: { configuration_set: '', message_stream: '' } })
 const webhookUrl = computed(() => `${useRuntimeConfig().public.supabaseUrl}/functions/v1/email-webhook?source=ses`)
 
@@ -103,6 +107,38 @@ async function remove() {
   if (!ok) return
   await $supabase.from('email_providers').delete().eq('id', editing.value.id)
   open.value = false; await load()
+}
+async function testSend(p: any) {
+  const to = window.prompt(`Send a test email via ${p.provider.toUpperCase()} (${p.stream}) to which address?`)
+  if (!to) return
+  testing.value = p.id
+  try {
+    const url = `${useRuntimeConfig().public.supabaseUrl}/functions/v1/notify`
+    const { data: { session } } = await $supabase.auth.getSession()
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || useRuntimeConfig().public.supabaseAnonKey}`,
+      },
+      body: JSON.stringify({
+        workspace_id: p.workspace_id,
+        to_email: to,
+        kind: 'otp',
+        title: 'Pulse provider test',
+        body: `This is a test send routed through ${p.provider.toUpperCase()} (${p.stream}). If you received this, the credentials and domain are working.`,
+        send_email: true,
+        stream_override: p.stream,
+      }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (json?.email?.sent) useToast().success(`Sent via ${json.email.provider}`)
+    else useToast().error(json?.email?.status || 'Failed', json?.email?.error || 'Check Supabase function logs')
+  } catch (e: any) {
+    useToast().error('Test send failed', e?.message || '')
+  } finally {
+    testing.value = ''
+  }
 }
 onMounted(load)
 </script>

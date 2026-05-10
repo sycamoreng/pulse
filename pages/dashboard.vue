@@ -59,6 +59,40 @@
         </div>
       </div>
 
+      <div v-if="auth.workspace?.sending_paused" class="card p-4 border-l-4 border-red-500 bg-red-50 flex items-center gap-3">
+        <Icon name="shield" class="text-red-600 w-5 h-5"/>
+        <div class="flex-1">
+          <div class="font-semibold text-red-900">Sending paused</div>
+          <div class="text-xs text-red-700">{{ auth.workspace.sending_paused_reason || 'Paused by admin.' }}</div>
+        </div>
+        <NuxtLink to="/settings" class="btn-secondary !py-1.5 !text-xs">Review</NuxtLink>
+      </div>
+
+      <div class="card p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <div class="font-semibold text-ink-900">Deliverability health</div>
+            <div class="text-xs text-ink-500">SPF, DKIM, and DMARC status across your sending domains</div>
+          </div>
+          <NuxtLink to="/settings" class="text-xs text-brand-500 font-semibold">Manage →</NuxtLink>
+        </div>
+        <div v-if="!health.total" class="text-sm text-ink-500 py-4">No sending domains connected yet. Add one in Settings to start sending from your own domain.</div>
+        <div v-else class="grid grid-cols-4 gap-4">
+          <div class="flex flex-col items-start">
+            <div class="text-xs font-semibold text-ink-500 uppercase tracking-wider">Verified</div>
+            <div class="mt-2 text-2xl font-bold text-ink-900">{{ health.verified }}<span class="text-sm font-medium text-ink-500"> / {{ health.total }}</span></div>
+          </div>
+          <div v-for="check in healthChecks" :key="check.key" class="flex flex-col items-start">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full" :class="check.value === health.total ? 'bg-accent-500' : check.value === 0 ? 'bg-red-500' : 'bg-amber-500'"></span>
+              <div class="text-xs font-semibold text-ink-500 uppercase tracking-wider">{{ check.label }}</div>
+            </div>
+            <div class="mt-2 text-2xl font-bold text-ink-900">{{ check.value }}<span class="text-sm font-medium text-ink-500"> / {{ health.total }}</span></div>
+            <div class="text-[11px] text-ink-500 mt-0.5">{{ check.hint }}</div>
+          </div>
+        </div>
+      </div>
+
       <div class="grid lg:grid-cols-2 gap-6">
         <div class="card p-6">
           <div class="flex items-center justify-between mb-4">
@@ -115,6 +149,12 @@ const recentEvents = ref<any[]>([])
 const topCampaigns = ref<any[]>([])
 const topJourneys = ref<any[]>([])
 const loading = ref(true)
+const health = ref<any>({ total: 0, verified: 0, spf_pass: 0, dkim_pass: 0, dmarc_pass: 0 })
+const healthChecks = computed(() => [
+  { key: 'spf', label: 'SPF', value: health.value.spf_pass, hint: 'authorizes senders' },
+  { key: 'dkim', label: 'DKIM', value: health.value.dkim_pass, hint: 'signs messages' },
+  { key: 'dmarc', label: 'DMARC', value: health.value.dmarc_pass, hint: 'enforces policy' },
+])
 const dayLabel = (i: number) => {
   const d = new Date(Date.now() - (13 - i) * 24 * 3600 * 1000)
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -152,6 +192,8 @@ async function load() {
     if (days >= 0 && days < 14) buckets[13 - days]++
   })
   chart.value = buckets
+  const { data: hv } = await supabase.from('email_domain_health_v').select('*').eq('workspace_id', wid).maybeSingle()
+  health.value = hv || { total: 0, verified: 0, spf_pass: 0, dkim_pass: 0, dmarc_pass: 0 }
   loading.value = false
 }
 

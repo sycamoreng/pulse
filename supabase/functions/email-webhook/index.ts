@@ -24,6 +24,34 @@ async function record(supabase: any, workspaceId: string, email: string, reason:
     email: email.toLowerCase(),
     reason, source, details,
   }, { onConflict: "workspace_id,email" });
+  if (reason === "complaint" || reason === "hard_bounce") {
+    await checkAndMaybeSuspend(supabase, workspaceId, reason);
+  }
+}
+
+async function checkAndMaybeSuspend(supabase: any, workspaceId: string, reason: string) {
+  const { data: policy } = await supabase.from("sending_policies").select("*").eq("workspace_id", workspaceId).maybeSingle();
+  if (!policy?.auto_suspend_on_breach) return;
+  const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  const { count: sentCount } = await supabase.from("transactional_sends").select("id", { count: "exact", head: true })
+    .eq("workspace_id", workspaceId).eq("status", "sent").gte("sent_at", since);
+  if (!sentCount || sentCount < 100) return;
+
+  const metric = reason === "complaint" ? "complaint_rate_24h" : "bounce_rate_24h";
+  const threshold = reason === "complaint" ? Number(policy.complaint_rate_threshold) : Number(policy.bounce_rate_threshold);
+  const suppressReason = reason === "complaint" ? "complaint" : "hard_bounce";
+  const { count: badCount } = await supabase.from("email_suppressions").select("email", { count: "exact", head: true })
+    .eq("workspace_id", workspaceId).eq("reason", suppressReason).gte("created_at", since);
+  const rate = (badCount || 0) / sentCount;
+  if (rate < threshold) return;
+
+  await supabase.from("workspaces").update({
+    sending_paused: true,
+    sending_paused_reason: `Auto-suspended: ${metric} ${(rate * 100).toFixed(3)}% >= ${(threshold * 100).toFixed(3)}%`,
+  }).eq("id", workspaceId);
+  await supabase.from("sending_suspensions").insert({
+    workspace_id: workspaceId, reason: "auto_suspend", metric, metric_value: rate, threshold,
+  });
 }
 
 Deno.serve(async (req: Request) => {

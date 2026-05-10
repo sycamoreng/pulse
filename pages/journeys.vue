@@ -62,6 +62,7 @@
           <div class="text-xs text-ink-500 w-12 text-center">{{ Math.round(zoom * 100) }}%</div>
           <button @click="zoom = Math.min(1.6, zoom + 0.1)" class="btn-ghost px-2 text-xs">+</button>
           <button @click="fitToScreen" class="btn-ghost px-2 text-xs">Fit</button>
+          <button @click="showStats = !showStats" class="btn-ghost px-2 text-xs ml-2" :class="showStats ? 'text-accent-500' : ''"><Icon name="activity" class="w-3 h-3"/>{{ showStats ? 'Hide stats' : 'Show stats' }}</button>
         </div>
       </div>
 
@@ -142,6 +143,15 @@
                 </div>
                 <div class="px-3 py-2 text-xs text-ink-500 min-h-[36px]">
                   {{ nodeSubtitle(n) }}
+                </div>
+                <div v-if="showStats && nodeStatsMap[n.id]" class="px-3 py-1.5 border-t border-ink-100 bg-ink-50 flex items-center justify-between text-[10px]">
+                  <span class="text-ink-500">In <span class="font-semibold text-ink-900">{{ nodeStatsMap[n.id].entered_count }}</span></span>
+                  <span class="text-ink-500">Done <span class="font-semibold text-accent-500">{{ nodeStatsMap[n.id].completed_count }}</span></span>
+                  <span class="text-ink-500">Drop <span class="font-semibold text-red-600">{{ dropFor(n.id) }}%</span></span>
+                </div>
+                <div v-if="showStats && n.kind === 'ab_split' && abStatsMap[n.id]" class="px-3 py-1.5 border-t border-ink-100 bg-white text-[10px] grid grid-cols-2 gap-1">
+                  <div class="text-center"><div class="font-semibold text-ink-900">A</div><div class="text-ink-500">{{ abStatsMap[n.id].a || 0 }} · {{ abConvPct(n.id, 'a') }}%</div></div>
+                  <div class="text-center"><div class="font-semibold text-ink-900">B</div><div class="text-ink-500">{{ abStatsMap[n.id].b || 0 }} · {{ abConvPct(n.id, 'b') }}%</div></div>
                 </div>
               </div>
               <button
@@ -344,6 +354,39 @@ const editing = ref<any>(null)
 const selectedId = ref('')
 const lastSavedAt = ref<string>('')
 const zoom = ref(1)
+const showStats = ref(true)
+const nodeStatsMap = ref<Record<string, any>>({})
+const abStatsMap = ref<Record<string, any>>({})
+function dropFor(nodeId: string) {
+  const s = nodeStatsMap.value[nodeId]
+  if (!s || !s.entered_count) return 0
+  return Math.max(0, Math.round(((s.entered_count - s.completed_count) / s.entered_count) * 100))
+}
+function abConvPct(nodeId: string, variant: 'a' | 'b') {
+  const s = abStatsMap.value[nodeId]
+  if (!s) return 0
+  const entered = Number(s[variant]) || 0
+  const conv = Number(s[variant + '_conv']) || 0
+  return entered ? Math.round((conv / entered) * 100) : 0
+}
+async function loadNodeStats(journeyId: string) {
+  nodeStatsMap.value = {}
+  abStatsMap.value = {}
+  const [ns, vs] = await Promise.all([
+    supabase.from('journey_node_stats').select('*').eq('journey_id', journeyId),
+    supabase.from('journey_variant_stats').select('*').eq('journey_id', journeyId),
+  ])
+  const map: Record<string, any> = {}
+  ;(ns.data || []).forEach((r: any) => { map[r.node_id] = r })
+  nodeStatsMap.value = map
+  const ab: Record<string, any> = {}
+  ;(vs.data || []).forEach((r: any) => {
+    ab[r.node_id] = ab[r.node_id] || {}
+    ab[r.node_id][r.variant] = r.entered_count
+    ab[r.node_id][r.variant + '_conv'] = r.converted_count
+  })
+  abStatsMap.value = ab
+}
 const form = reactive({
   name: '', description: '', status: 'draft', trigger_event: '',
   nodes: [] as any[], edges: [] as any[], goal: { event: '', window_days: 7 } as any,
@@ -661,6 +704,7 @@ async function openJourney(j: any) {
   form.holdout_percent = j.holdout_percent || 0
   form.variant_strategy = j.variant_strategy || 'random'
   form.success_goal = j.success_goal || ''
+  if (j.id) await loadNodeStats(j.id)
 }
 function closeEditor() { editing.value = null; load() }
 

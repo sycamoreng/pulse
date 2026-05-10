@@ -72,6 +72,30 @@
         </div>
         <div v-if="form.channel === 'email'"><label class="label">Subject</label><input v-model="form.subject" class="input"/></div>
         <div><label class="label">Message content</label><textarea v-model="form.content" rows="6" class="input font-mono text-sm" placeholder="Hi {{first_name}}, ..."></textarea></div>
+
+        <div v-if="form.channel === 'email'" class="rounded-xl border border-ink-100 bg-ink-50/60 p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <Icon name="shield" class="w-4 h-4 text-ink-500"/>
+              <div class="font-semibold text-ink-900 text-sm">Deliverability score</div>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="text-2xl font-bold" :class="scoreColor">{{ lintScore.score }}<span class="text-xs font-medium text-ink-500">/100</span></div>
+              <span class="chip capitalize" :class="scoreChipClass">{{ lintScore.label }}</span>
+            </div>
+          </div>
+          <div v-if="lintFindings.length" class="space-y-1">
+            <div v-for="f in lintFindings" :key="f.code" class="flex items-start gap-2 text-xs">
+              <span class="mt-0.5 w-1.5 h-1.5 rounded-full shrink-0" :class="f.severity === 'error' ? 'bg-red-500' : f.severity === 'warn' ? 'bg-amber-500' : 'bg-ink-300'"></span>
+              <span :class="f.severity === 'error' ? 'text-red-700' : f.severity === 'warn' ? 'text-amber-700' : 'text-ink-700'">{{ f.message }}</span>
+            </div>
+          </div>
+          <div v-else class="text-xs text-accent-500">No issues detected — looks good to send.</div>
+          <div class="mt-3 pt-3 border-t border-ink-100 flex items-center gap-2">
+            <input v-model="previewTo" type="email" placeholder="Send preview to (your email)" class="input !py-1.5 !text-xs flex-1"/>
+            <button type="button" @click="sendPreview" :disabled="previewing || !previewTo" class="btn-secondary !py-1.5 !text-xs">{{ previewing ? 'Sending…' : 'Send preview to inbox' }}</button>
+          </div>
+        </div>
         <div class="grid grid-cols-3 gap-3">
           <div>
             <label class="label">Schedule</label>
@@ -165,6 +189,10 @@ const { supabase, workspaceId } = useWorkspace()
 const { sendCampaign, resolveAudience } = useEngagement()
 const role = useRole()
 const audit = useAudit()
+const { $supabase } = useNuxtApp()
+const { lintEmail, scoreFromFindings } = useSpamLinter()
+const previewTo = ref('')
+const previewing = ref(false)
 const requesting = ref(false)
 const approvalFlash = ref('')
 async function askApproval() {
@@ -202,6 +230,43 @@ function addVariant() {
 function removeVariant(i: number) { variants.value.splice(i, 1) }
 
 const statusClass = (s: string) => ({ draft: 'bg-ink-100 text-ink-700', scheduled: 'bg-brand-100/40 text-brand-700', sent: 'bg-accent-500/10 text-accent-500', sending: 'bg-yellow-100 text-yellow-700' }[s] || 'bg-ink-100 text-ink-700')
+
+const lintFindings = computed(() => form.channel === 'email' ? lintEmail({ subject: form.subject, html: form.content, channel: form.channel }) : [])
+const lintScore = computed(() => scoreFromFindings(lintFindings.value))
+const scoreColor = computed(() => ({ accent: 'text-accent-500', brand: 'text-brand-500', amber: 'text-amber-600', red: 'text-red-600' }[lintScore.value.tone] || 'text-ink-900'))
+const scoreChipClass = computed(() => ({ accent: 'bg-accent-500/10 text-accent-500', brand: 'bg-brand-100/40 text-brand-700', amber: 'bg-amber-100 text-amber-700', red: 'bg-red-100 text-red-700' }[lintScore.value.tone] || 'bg-ink-100 text-ink-700'))
+
+async function sendPreview() {
+  if (!previewTo.value || !workspaceId.value) return
+  previewing.value = true
+  try {
+    const { data: { session } } = await $supabase.auth.getSession()
+    const url = `${useRuntimeConfig().public.supabaseUrl}/functions/v1/notify`
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || useRuntimeConfig().public.supabaseAnonKey}`,
+      },
+      body: JSON.stringify({
+        workspace_id: workspaceId.value,
+        to_email: previewTo.value,
+        kind: 'otp',
+        title: `[PREVIEW] ${form.subject || form.name || 'Campaign'}`,
+        body: form.content || '(empty body)',
+        send_email: true,
+        stream_override: 'transactional',
+      }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (json?.email?.sent) useToast().success('Preview sent', `Check ${previewTo.value}`)
+    else useToast().error('Preview failed', json?.email?.error || json?.email?.status || 'Unknown error')
+  } catch (e: any) {
+    useToast().error('Preview failed', e?.message || '')
+  } finally {
+    previewing.value = false
+  }
+}
 const ctr = (c: any) => c.sent_count ? ((c.click_count / c.sent_count) * 100).toFixed(1) : '0.0'
 
 const stats = computed(() => {

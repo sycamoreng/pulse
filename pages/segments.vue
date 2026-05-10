@@ -130,6 +130,13 @@ async function preview() {
   matches.value = data || []
   previewing.value = false
 }
+let previewTimer: ReturnType<typeof setTimeout> | null = null
+watch(() => JSON.stringify(form.conditions), () => {
+  if (!open.value) return
+  if (previewTimer) clearTimeout(previewTimer)
+  previewTimer = setTimeout(() => { if (open.value) preview() }, 400)
+})
+
 async function save() {
   await preview()
   const payload = { name: form.name, description: form.description, rules: { conditions: form.conditions }, estimated_count: estimated.value, workspace_id: workspaceId.value }

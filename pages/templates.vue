@@ -55,6 +55,17 @@
             <textarea v-model="form.content" rows="10" class="input font-mono text-sm" placeholder="Hi {{first_name}}, ..."></textarea>
             <div class="text-[11px] text-ink-500 mt-1">Liquid vars: <code class="bg-ink-50 px-1 rounded">&#123;&#123;first_name&#125;&#125;</code> <code class="bg-ink-50 px-1 rounded">&#123;&#123;attributes.wallet_balance_ngn&#125;&#125;</code> <code class="bg-ink-50 px-1 rounded">&#123;% if attributes.is_premium %&#125;...&#123;% endif %&#125;</code></div>
           </div>
+          <div v-if="form.channel === 'email'" class="border-t border-ink-100 pt-3">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" v-model="ampEnabled"/>
+              <span class="label !mb-0">Enable AMP for Email</span>
+              <span class="chip bg-accent-500/10 text-accent-500 text-[10px]">Premium</span>
+            </label>
+            <div v-if="ampEnabled" class="mt-2">
+              <textarea v-model="form.amp_html" rows="8" class="input font-mono text-sm" placeholder="<!doctype html>&#10;<html amp4email>&#10;  <head>...</head>&#10;  <body>...</body>&#10;</html>"></textarea>
+              <div class="text-[11px] text-ink-500 mt-1">AMP-capable inboxes (Gmail, Yahoo) render the interactive version. Others fall back to HTML.</div>
+            </div>
+          </div>
         </div>
 
         <div class="space-y-3">
@@ -110,7 +121,8 @@ const open = ref(false)
 const editing = ref<any>(null)
 const filter = ref('')
 const channels = ['email','push','sms','whatsapp','inapp','onsite']
-const form = reactive({ name: '', channel: 'email', category: 'general', subject: '', content: '', preview_text: '' })
+const form = reactive<any>({ name: '', channel: 'email', category: 'general', subject: '', content: '', preview_text: '', amp_html: '' })
+const ampEnabled = ref(false)
 
 const filtered = computed(() => filter.value ? templates.value.filter(t => t.channel === filter.value) : templates.value)
 const channelIcon = (c: string) => ({ email: 'mail', push: 'bell', sms: 'smartphone', whatsapp: 'smartphone', inapp: 'smartphone', onsite: 'monitor' }[c] || 'mail')
@@ -134,12 +146,13 @@ async function load() {
 }
 function edit(t: any) {
   editing.value = t
-  if (t) Object.assign(form, { name: t.name, channel: t.channel, category: t.category, subject: t.subject, content: t.content, preview_text: t.preview_text })
-  else Object.assign(form, { name: '', channel: 'email', category: 'general', subject: '', content: '', preview_text: '' })
+  if (t) Object.assign(form, { name: t.name, channel: t.channel, category: t.category, subject: t.subject, content: t.content, preview_text: t.preview_text, amp_html: t.amp_html || '' })
+  else Object.assign(form, { name: '', channel: 'email', category: 'general', subject: '', content: '', preview_text: '', amp_html: '' })
+  ampEnabled.value = !!(t?.amp_html)
   open.value = true
 }
 async function save() {
-  const payload = { ...form, workspace_id: workspaceId.value }
+  const payload = { ...form, amp_html: ampEnabled.value ? form.amp_html : '', workspace_id: workspaceId.value }
   const res = editing.value?.id
     ? await supabase.from('templates').update(payload).eq('id', editing.value.id).select().maybeSingle()
     : await supabase.from('templates').insert(payload).select().maybeSingle()

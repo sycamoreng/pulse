@@ -140,6 +140,60 @@ Deno.serve(async (req: Request) => {
 
     let emailResult: any = { sent: false };
     if (payload.send_email && payload.to_email) {
+      // Paused?
+      if (ws?.sending_paused) {
+        await supabase.from("transactional_sends").insert({
+          workspace_id: payload.workspace_id, to_email: payload.to_email,
+          kind: payload.kind, status: "paused", error: ws.sending_paused_reason || "Sending paused",
+        });
+        return new Response(JSON.stringify({ ok: true, email: { sent: false, status: "paused", error: ws.sending_paused_reason } }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: policy } = await supabase.from("sending_policies").select("*").eq("workspace_id", payload.workspace_id).maybeSingle();
+      const isTransactional = TRANSACTIONAL_KINDS.has(payload.kind);
+
+      // Frequency caps (skip for transactional kinds)
+      if (policy && !isTransactional) {
+        const emailLower = payload.to_email.toLowerCase();
+        const since24 = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+        const since7d = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+        const [{ count: c24 }, { count: c7d }] = await Promise.all([
+          supabase.from("transactional_sends").select("id", { count: "exact", head: true })
+            .eq("workspace_id", payload.workspace_id).eq("to_email", emailLower).eq("status", "sent").gte("sent_at", since24),
+          supabase.from("transactional_sends").select("id", { count: "exact", head: true })
+            .eq("workspace_id", payload.workspace_id).eq("to_email", emailLower).eq("status", "sent").gte("sent_at", since7d),
+        ]);
+        if ((c24 || 0) >= policy.max_messages_per_contact_24h || (c7d || 0) >= policy.max_messages_per_contact_7d) {
+          await supabase.from("transactional_sends").insert({
+            workspace_id: payload.workspace_id, to_email: payload.to_email,
+            kind: payload.kind, status: "rate_limited",
+            error: `Cap hit (24h:${c24}/${policy.max_messages_per_contact_24h}, 7d:${c7d}/${policy.max_messages_per_contact_7d})`,
+          });
+          return new Response(JSON.stringify({ ok: true, email: { sent: false, status: "rate_limited" } }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      // Quiet hours
+      if (policy?.respect_quiet_hours && !isTransactional) {
+        const tz = ws?.timezone || "UTC";
+        const hour = parseInt(new Intl.DateTimeFormat("en-US", { hour: "2-digit", hour12: false, timeZone: tz }).format(new Date()), 10);
+        const qs = policy.quiet_hours_start, qe = policy.quiet_hours_end;
+        const inQuiet = qs > qe ? (hour >= qs || hour < qe) : (hour >= qs && hour < qe);
+        if (inQuiet) {
+          await supabase.from("transactional_sends").insert({
+            workspace_id: payload.workspace_id, to_email: payload.to_email,
+            kind: payload.kind, status: "quiet_hours", error: `In quiet window ${qs}:00-${qe}:00 ${tz}`,
+          });
+          return new Response(JSON.stringify({ ok: true, email: { sent: false, status: "quiet_hours" } }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
       // Suppression check
       const { data: suppressed } = await supabase
         .from("email_suppressions")

@@ -1,7 +1,7 @@
 <template>
-  <div class="min-h-screen bg-ink-50">
-    <aside class="fixed top-0 left-0 bottom-0 w-64 bg-white border-r border-ink-100 flex flex-col z-40">
-      <div class="px-4 py-4 border-b border-ink-100 shrink-0">
+  <div class="min-h-screen bg-ink-50 dark:bg-[color:var(--surface-app)]">
+    <aside class="fixed top-0 left-0 bottom-0 w-64 bg-white dark:bg-[color:var(--surface-card)] border-r border-ink-100 dark:border-[color:var(--border-subtle)] flex flex-col z-40">
+      <div class="px-4 py-4 border-b border-ink-100 dark:border-[color:var(--border-subtle)] shrink-0">
         <div class="flex items-center gap-2 mb-3">
           <div class="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center">
             <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 12h3l2-8 4 16 3-10 2 5h6"/></svg>
@@ -54,6 +54,7 @@
         <NuxtLink to="/funnels" class="nav-link" active-class="nav-link-active"><Icon name="filter"/>Funnels</NuxtLink>
         <NuxtLink to="/cohorts" class="nav-link" active-class="nav-link-active"><Icon name="layers"/>Cohorts</NuxtLink>
         <NuxtLink to="/rfm" class="nav-link" active-class="nav-link-active"><Icon name="trending"/>RFM Analysis</NuxtLink>
+        <NuxtLink v-if="auth.workspace?.commerce_enabled" to="/products" class="nav-link" active-class="nav-link-active"><Icon name="box"/>Products</NuxtLink>
 
         <div class="px-3 pt-4 pb-1 text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Engagement</div>
         <NuxtLink to="/campaigns" class="nav-link" active-class="nav-link-active"><Icon name="send"/>Campaigns</NuxtLink>
@@ -65,10 +66,21 @@
 
         <div class="px-3 pt-4 pb-1 text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Settings</div>
         <NuxtLink to="/apps" class="nav-link" active-class="nav-link-active"><Icon name="box"/>Apps & SDKs</NuxtLink>
+        <NuxtLink to="/integrations" class="nav-link" active-class="nav-link-active"><Icon name="layers"/>Integrations</NuxtLink>
+        <NuxtLink to="/trust" class="nav-link" active-class="nav-link-active"><Icon name="shield"/>Trust & Premium</NuxtLink>
         <NuxtLink to="/settings" class="nav-link" active-class="nav-link-active"><Icon name="settings"/>Settings</NuxtLink>
       </nav>
 
       <div class="p-3 border-t border-ink-100 shrink-0">
+        <div class="flex items-center gap-1 mb-1">
+          <NuxtLink to="/docs" target="_blank" class="flex-1 flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-ink-500 dark:text-[color:var(--text-tertiary)] hover:bg-ink-50 dark:hover:bg-[color:var(--surface-muted)] hover:text-ink-900 dark:hover:text-[color:var(--text-primary)]">
+            <Icon name="copy" class="w-3.5 h-3.5"/>Documentation
+          </NuxtLink>
+          <button @click="theme.toggle()" class="w-7 h-7 rounded-lg text-ink-500 dark:text-[color:var(--text-tertiary)] hover:bg-ink-50 dark:hover:bg-[color:var(--surface-muted)] flex items-center justify-center" :title="theme.theme.value === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'">
+            <svg v-if="theme.theme.value === 'dark'" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+            <svg v-else class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
+        </div>
         <div class="flex items-center gap-3 p-2">
           <div class="w-8 h-8 rounded-full bg-brand-900 text-white flex items-center justify-center text-xs font-semibold">{{ initials }}</div>
           <div class="flex-1 min-w-0">
@@ -88,11 +100,11 @@
 
     <div class="fixed top-4 right-6 z-50">
       <div class="relative">
-        <button @click="notifOpen = !notifOpen" class="w-10 h-10 rounded-full bg-white border border-ink-100 shadow-soft flex items-center justify-center text-ink-700 hover:text-brand-500 relative">
+        <button @click="notifOpen = !notifOpen" class="w-10 h-10 rounded-full bg-white dark:bg-[color:var(--surface-card)] border border-ink-100 dark:border-[color:var(--border-subtle)] shadow-soft flex items-center justify-center text-ink-700 dark:text-[color:var(--text-secondary)] hover:text-brand-500 relative">
           <Icon name="bell" class="w-5 h-5"/>
           <span v-if="unreadCount" class="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
         </button>
-        <div v-if="notifOpen" class="absolute right-0 top-full mt-2 w-96 bg-white rounded-xl shadow-soft border border-ink-100 overflow-hidden">
+        <div v-if="notifOpen" class="absolute right-0 top-full mt-2 w-96 bg-white dark:bg-[color:var(--surface-card)] rounded-xl shadow-soft border border-ink-100 dark:border-[color:var(--border-subtle)] overflow-hidden">
           <div class="px-4 py-3 border-b border-ink-100 flex items-center justify-between">
             <div class="font-semibold text-ink-900 text-sm">Notifications</div>
             <button v-if="unreadCount" @click="markAllRead" class="text-[11px] text-brand-500 hover:underline">Mark all read</button>
@@ -123,6 +135,7 @@
 import { useAuthStore } from '~/stores/auth'
 const auth = useAuthStore()
 const role = useRole()
+const theme = useTheme()
 const { supabase } = useWorkspace()
 const initials = computed(() => (auth.user?.email || 'U').slice(0, 2).toUpperCase())
 const wsOpen = ref(false)

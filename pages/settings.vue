@@ -82,6 +82,22 @@
         </div>
       </div>
 
+      <div v-if="tab === 'workspace'" class="card p-6">
+        <div class="font-semibold text-ink-900 mb-1">Feature modules</div>
+        <div class="text-xs text-ink-500 mb-4">Turn on only what your workspace needs. Fintech, SaaS, and media teams can leave commerce disabled.</div>
+        <label class="flex items-start gap-3 p-3 border border-ink-100 rounded-lg cursor-pointer hover:bg-ink-50">
+          <input type="checkbox" :checked="!!auth.workspace?.commerce_enabled" @change="toggleCommerce(($event.target as HTMLInputElement).checked)" :disabled="!isOwner" class="mt-1"/>
+          <div class="flex-1">
+            <div class="text-sm font-semibold text-ink-900 flex items-center gap-2">
+              <Icon name="box" class="w-4 h-4"/>Commerce
+            </div>
+            <div class="text-xs text-ink-500 mt-0.5">Product catalog, Shopify / WooCommerce order ingestion, abandoned-cart flows, and revenue attribution.</div>
+          </div>
+          <span v-if="auth.workspace?.commerce_enabled" class="chip bg-accent-500/10 text-accent-500 text-[10px]">ON</span>
+          <span v-else class="chip bg-ink-100 text-ink-500 text-[10px]">OFF</span>
+        </label>
+      </div>
+
       <!-- Workspaces -->
       <div v-if="tab === 'workspaces'" class="card p-6">
         <div class="flex items-center justify-between mb-4">
@@ -277,9 +293,40 @@
 
       <!-- Messaging policies -->
       <div v-if="tab === 'policies'" class="space-y-4">
+        <div v-if="auth.workspace?.sending_paused" class="card p-5 border-l-4 border-red-500 bg-red-50">
+          <div class="flex items-start gap-3">
+            <Icon name="shield" class="text-red-600 w-5 h-5 mt-0.5"/>
+            <div class="flex-1">
+              <div class="font-semibold text-red-900">Sending is paused for this workspace</div>
+              <div class="text-xs text-red-700 mt-0.5">{{ auth.workspace.sending_paused_reason }}</div>
+              <button @click="resumeSending" class="mt-3 btn-secondary !py-1 !text-xs">Resume sending</button>
+            </div>
+          </div>
+        </div>
+
         <div class="card p-6">
-          <div class="font-semibold text-ink-900">Messaging policies</div>
-          <div class="text-xs text-ink-500 mt-1">Per-channel frequency caps, quiet hours and send-time optimization. Applied to all campaigns and journey sends unless overridden.</div>
+          <div class="font-semibold text-ink-900">Deliverability safeguards</div>
+          <div class="text-xs text-ink-500 mt-1 mb-4">Platform-wide limits that protect your sender reputation. Applied on every transactional and broadcast send.</div>
+          <div class="grid md:grid-cols-2 gap-3">
+            <div><label class="label">Max messages per contact, 24h</label><input v-model.number="sendingPolicy.max_messages_per_contact_24h" type="number" min="1" class="input"/></div>
+            <div><label class="label">Max messages per contact, 7d</label><input v-model.number="sendingPolicy.max_messages_per_contact_7d" type="number" min="1" class="input"/></div>
+            <div><label class="label">Quiet hours start ({{ wsForm.timezone }})</label><input v-model.number="sendingPolicy.quiet_hours_start" type="number" min="0" max="23" class="input"/></div>
+            <div><label class="label">Quiet hours end ({{ wsForm.timezone }})</label><input v-model.number="sendingPolicy.quiet_hours_end" type="number" min="0" max="23" class="input"/></div>
+            <div><label class="label">Complaint rate threshold</label><input v-model.number="sendingPolicyComplaintPct" type="number" step="0.01" min="0" class="input"/><div class="text-[11px] text-ink-500 mt-1">%. Auto-pause if crossed over 24h (min 100 sends).</div></div>
+            <div><label class="label">Hard-bounce rate threshold</label><input v-model.number="sendingPolicyBouncePct" type="number" step="0.1" min="0" class="input"/><div class="text-[11px] text-ink-500 mt-1">%. Auto-pause if crossed over 24h (min 100 sends).</div></div>
+          </div>
+          <div class="flex items-center gap-4 mt-3">
+            <label class="flex items-center gap-2 text-sm text-ink-700"><input type="checkbox" v-model="sendingPolicy.respect_quiet_hours"/> Enforce quiet hours</label>
+            <label class="flex items-center gap-2 text-sm text-ink-700"><input type="checkbox" v-model="sendingPolicy.auto_suspend_on_breach"/> Auto-pause on threshold breach</label>
+          </div>
+          <div class="flex justify-end pt-3">
+            <button @click="saveSendingPolicy" class="btn-primary">Save safeguards</button>
+          </div>
+        </div>
+
+        <div class="card p-6">
+          <div class="font-semibold text-ink-900">Per-channel messaging policies</div>
+          <div class="text-xs text-ink-500 mt-1">Channel-specific caps and send-time optimization. Apply on top of the platform safeguards above.</div>
         </div>
         <div class="grid md:grid-cols-2 gap-4">
           <div v-for="p in policies" :key="p.channel" class="card p-5 space-y-3">
@@ -604,6 +651,24 @@ const approvals = ref<any[]>([])
 const domains = ref<any[]>([])
 const senders = ref<any[]>([])
 const policies = ref<any[]>([])
+const sendingPolicy = reactive<any>({
+  max_messages_per_contact_24h: 2,
+  max_messages_per_contact_7d: 5,
+  quiet_hours_start: 21,
+  quiet_hours_end: 8,
+  respect_quiet_hours: true,
+  complaint_rate_threshold: 0.001,
+  bounce_rate_threshold: 0.05,
+  auto_suspend_on_breach: true,
+})
+const sendingPolicyComplaintPct = computed({
+  get: () => Number((sendingPolicy.complaint_rate_threshold * 100).toFixed(3)),
+  set: (v: number) => { sendingPolicy.complaint_rate_threshold = Number(v) / 100 },
+})
+const sendingPolicyBouncePct = computed({
+  get: () => Number((sendingPolicy.bounce_rate_threshold * 100).toFixed(2)),
+  set: (v: number) => { sendingPolicy.bounce_rate_threshold = Number(v) / 100 },
+})
 const exports = ref<any[]>([])
 const auditLogs = ref<any[]>([])
 const auditFilter = ref('')
@@ -641,6 +706,40 @@ function auditIcon(action: string) {
   return 'activity'
 }
 const filteredAudit = computed(() => auditFilter.value ? auditLogs.value.filter((a: any) => a.entity_type === auditFilter.value) : auditLogs.value)
+
+async function saveSendingPolicy() {
+  const payload = {
+    workspace_id: workspaceId.value,
+    max_messages_per_contact_24h: sendingPolicy.max_messages_per_contact_24h,
+    max_messages_per_contact_7d: sendingPolicy.max_messages_per_contact_7d,
+    quiet_hours_start: sendingPolicy.quiet_hours_start,
+    quiet_hours_end: sendingPolicy.quiet_hours_end,
+    respect_quiet_hours: sendingPolicy.respect_quiet_hours,
+    complaint_rate_threshold: sendingPolicy.complaint_rate_threshold,
+    bounce_rate_threshold: sendingPolicy.bounce_rate_threshold,
+    auto_suspend_on_breach: sendingPolicy.auto_suspend_on_breach,
+    updated_at: new Date().toISOString(),
+    updated_by: auth.user?.id || null,
+  }
+  const { error } = await supabase.from('sending_policies').upsert(payload, { onConflict: 'workspace_id' })
+  if (error) { toast.error('Save failed', error.message); return }
+  audit.log('update', 'sending_policy', workspaceId.value, 'Deliverability safeguards', payload)
+  toast.success('Deliverability safeguards saved')
+}
+
+async function resumeSending() {
+  const ok = await confirmDialog.ask({ title: 'Resume sending?', body: 'Make sure the cause of the pause has been resolved (e.g. high complaints, bad list). Resuming will clear the pause immediately.', confirmText: 'Resume' })
+  if (!ok) return
+  await supabase.from('workspaces').update({ sending_paused: false, sending_paused_reason: '' }).eq('id', workspaceId.value)
+  const open = await supabase.from('sending_suspensions').select('id').eq('workspace_id', workspaceId.value).is('resolved_at', null).limit(1).maybeSingle()
+  if (open.data?.id) {
+    await supabase.from('sending_suspensions').update({ resolved_at: new Date().toISOString(), resolved_by: auth.user?.id || null }).eq('id', open.data.id)
+  }
+  audit.log('update', 'workspace', workspaceId.value, 'Resumed sending', {})
+  toast.success('Sending resumed')
+  const { data } = await supabase.from('workspaces').select('*').eq('id', workspaceId.value).maybeSingle()
+  if (data) auth.workspace = data
+}
 
 async function savePolicy(p: any) {
   const payload: any = {
@@ -760,6 +859,16 @@ function hydrateForm() {
 }
 watchEffect(hydrateForm)
 
+async function toggleCommerce(on: boolean) {
+  if (!workspaceId.value) return
+  const { data, error } = await supabase.from('workspaces').update({ commerce_enabled: on }).eq('id', workspaceId.value).select().maybeSingle()
+  if (error || !data) { toast.error('Could not update', error?.message || 'Only owners can toggle modules.'); return }
+  auth.workspace = data
+  auth.workspaces = auth.workspaces.map((w: any) => w.id === data.id ? data : w)
+  audit.log('update', 'workspace', workspaceId.value, 'Commerce module', { commerce_enabled: on })
+  toast.success(`Commerce ${on ? 'enabled' : 'disabled'}`)
+}
+
 async function saveWorkspace() {
   if (!workspaceId.value) return
   saving.value = true
@@ -808,6 +917,8 @@ async function loadAll() {
   auditLogs.value = al.data || []
   plans.value = pls.data || []
   retentionDays.value = auth.workspace?.data_retention_days || 365
+  const { data: sp } = await supabase.from('sending_policies').select('*').eq('workspace_id', workspaceId.value).maybeSingle()
+  if (sp) Object.assign(sendingPolicy, sp)
   loadingRoles.value = false
   loadingEmail.value = false
   if (!invRoleId.value) {
