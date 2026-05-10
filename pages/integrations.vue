@@ -302,7 +302,7 @@ function genSecret() {
   crypto.getRandomValues(bytes)
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
 }
-function genKey(prefix: 'pk_' | 'ppk_' = 'pk_') {
+function genKey(prefix: string = 'pk_') {
   const bytes = new Uint8Array(32)
   crypto.getRandomValues(bytes)
   return prefix + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
@@ -369,9 +369,11 @@ async function testHook(h: any) {
 function newKey() { Object.assign(keyForm, { name: '', scopes: ['track:write'], key_type: 'secret', allowed_origins: '', allowed_bundle_ids: '' }); newKeyValue.value = ''; keyOpen.value = true }
 async function saveKey() {
   const isPub = keyForm.key_type === 'publishable'
-  const plain = genKey(isPub ? 'ppk_' : 'pk_')
+  const envTag = auth.workspace?.environment === 'test' ? 'test' : 'live'
+  const basePrefix = isPub ? 'ppk_' : 'pk_'
+  const plain = genKey(`${basePrefix}${envTag}_` as any)
   const hash = await sha256(plain)
-  const prefix = plain.slice(0, 10)
+  const prefix = plain.slice(0, 14)
   const scopes = isPub ? ['track:write'] : keyForm.scopes
   const allowedOrigins = isPub ? keyForm.allowed_origins.split(',').map((s: string) => s.trim()).filter(Boolean) : []
   const allowedBundleIds = isPub ? keyForm.allowed_bundle_ids.split(',').map((s: string) => s.trim()).filter(Boolean) : []
@@ -383,6 +385,7 @@ async function saveKey() {
     key_hash: hash,
     scopes,
     key_type: keyForm.key_type,
+    environment: auth.workspace?.environment === 'test' ? 'test' : 'production',
     allowed_origins: allowedOrigins,
     allowed_bundle_ids: allowedBundleIds,
     created_by: auth.user?.id || null,

@@ -1,18 +1,18 @@
 <template>
   <div class="min-h-screen bg-white">
-    <header class="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-ink-100/60">
+    <header class="landing-header sticky top-0 z-40 backdrop-blur-lg border-b border-ink-100/60 dark:border-[color:var(--border-subtle)]">
       <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <div class="w-9 h-9 rounded-lg bg-brand-500 flex items-center justify-center">
+          <div class="w-9 h-9 rounded-lg bg-brand-500 flex items-center justify-center shadow-sm shadow-brand-500/30">
             <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 12h3l2-8 4 16 3-10 2 5h6"/></svg>
           </div>
-          <span class="font-bold text-lg text-brand-900">Pulse</span>
+          <span class="font-bold text-lg text-brand-900 dark:text-white">Pulse</span>
         </div>
-        <nav class="hidden md:flex items-center gap-8 text-sm text-ink-700">
-          <a href="#features" class="hover:text-brand-500">Features</a>
-          <a href="#channels" class="hover:text-brand-500">Channels</a>
-          <a href="#pricing" class="hover:text-brand-500">Pricing</a>
-          <a href="#customers" class="hover:text-brand-500">Customers</a>
+        <nav class="hidden md:flex items-center gap-8 text-sm text-ink-700 dark:text-[color:var(--text-secondary)]">
+          <a href="#features" class="hover:text-brand-500 dark:hover:text-white transition-colors">Features</a>
+          <a href="#channels" class="hover:text-brand-500 dark:hover:text-white transition-colors">Channels</a>
+          <a href="#pricing" class="hover:text-brand-500 dark:hover:text-white transition-colors">Pricing</a>
+          <a href="#customers" class="hover:text-brand-500 dark:hover:text-white transition-colors">Customers</a>
         </nav>
         <div class="flex items-center gap-3">
           <NuxtLink to="/login" class="btn-ghost">Sign in</NuxtLink>
@@ -42,15 +42,54 @@
           <NuxtLink to="/signup" class="btn-primary text-base px-8 py-3.5 shadow-lg shadow-brand-500/30 hover:shadow-brand-500/50 transition-shadow">Start free · No card</NuxtLink>
           <a href="#demo" class="btn-secondary text-base px-8 py-3.5">Watch the 2-min demo</a>
         </div>
-        <div class="mt-10 text-xs text-ink-500 font-medium">Trusted by teams at growing companies</div>
-        <div class="mt-4 flex items-center justify-center gap-10 opacity-60 text-ink-500 text-xl font-bold tracking-tight">
-          <span>Flicker</span><span>Northpeak</span><span>Bayside</span><span>Kindred</span><span>Orbit</span>
+        <div class="mt-12 text-xs text-ink-500 font-medium uppercase tracking-[0.2em]">Trusted by teams at growing companies</div>
+        <div class="mt-5 flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-ink-500/80">
+          <div class="flex items-center gap-2 text-lg font-bold tracking-tight"><span class="w-6 h-6 rounded-md bg-ink-500/10 flex items-center justify-center"><Icon name="activity" class="w-3.5 h-3.5"/></span>Flicker</div>
+          <div class="flex items-center gap-2 text-lg font-bold tracking-tight"><span class="w-6 h-6 rounded-md bg-ink-500/10 flex items-center justify-center"><Icon name="route" class="w-3.5 h-3.5"/></span>Northpeak</div>
+          <div class="flex items-center gap-2 text-lg font-bold tracking-tight"><span class="w-6 h-6 rounded-md bg-ink-500/10 flex items-center justify-center"><Icon name="send" class="w-3.5 h-3.5"/></span>Bayside</div>
+          <div class="flex items-center gap-2 text-lg font-bold tracking-tight"><span class="w-6 h-6 rounded-md bg-ink-500/10 flex items-center justify-center"><Icon name="segment" class="w-3.5 h-3.5"/></span>Kindred</div>
+          <div class="flex items-center gap-2 text-lg font-bold tracking-tight"><span class="w-6 h-6 rounded-md bg-ink-500/10 flex items-center justify-center"><Icon name="shield" class="w-3.5 h-3.5"/></span>Orbit</div>
         </div>
 
-        <div class="mt-16 relative max-w-5xl mx-auto">
-          <div class="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent z-10 pointer-events-none"></div>
-          <div class="rounded-2xl overflow-hidden border border-ink-100 shadow-2xl shadow-brand-500/10 bg-white">
-            <img src="https://images.pexels.com/photos/7567443/pexels-photo-7567443.jpeg?auto=compress&cs=tinysrgb&w=1600" class="w-full h-[480px] object-cover" alt="Dashboard"/>
+        <div class="mt-16 relative max-w-6xl mx-auto">
+          <div class="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent z-10 pointer-events-none dark:from-[color:var(--surface-app)]"></div>
+          <div class="relative grid grid-cols-1 md:grid-cols-12 gap-4">
+            <div class="md:col-span-8 rounded-2xl overflow-hidden border border-ink-100 dark:border-[color:var(--border-subtle)] shadow-2xl shadow-brand-500/10 bg-white">
+              <img src="https://images.pexels.com/photos/7567443/pexels-photo-7567443.jpeg?auto=compress&cs=tinysrgb&w=1600" class="w-full h-[440px] object-cover" alt="Dashboard"/>
+            </div>
+            <div class="md:col-span-4 flex flex-col gap-4">
+              <div class="card p-5 flex-1">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-lg bg-accent-500/15 text-accent-500 flex items-center justify-center"><Icon name="activity" class="w-5 h-5"/></div>
+                  <div>
+                    <div class="text-xs text-ink-500">Live campaign</div>
+                    <div class="font-semibold text-ink-900">Winter re-engagement</div>
+                  </div>
+                </div>
+                <div class="mt-5 grid grid-cols-3 gap-3 text-center">
+                  <div><div class="text-2xl font-black text-brand-900">62%</div><div class="text-[10px] uppercase tracking-wider text-ink-500 mt-0.5">Opens</div></div>
+                  <div><div class="text-2xl font-black text-brand-900">18%</div><div class="text-[10px] uppercase tracking-wider text-ink-500 mt-0.5">Clicks</div></div>
+                  <div><div class="text-2xl font-black text-accent-500">7.4%</div><div class="text-[10px] uppercase tracking-wider text-ink-500 mt-0.5">Revenue</div></div>
+                </div>
+                <div class="mt-5 h-1.5 rounded-full bg-ink-100 dark:bg-[color:var(--surface-muted)] overflow-hidden">
+                  <div class="h-full bg-gradient-to-r from-brand-500 to-accent-500 w-[72%]"></div>
+                </div>
+              </div>
+              <div class="card p-5 flex-1">
+                <div class="flex items-center gap-3 mb-3">
+                  <img src="https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=96" class="w-9 h-9 rounded-full object-cover" alt=""/>
+                  <div>
+                    <div class="font-semibold text-ink-900 text-sm">Kofi Mensah</div>
+                    <div class="text-xs text-ink-500">Lagos · iOS · 2m ago</div>
+                  </div>
+                </div>
+                <div class="text-xs text-ink-500 space-y-1.5">
+                  <div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-accent-500"></span>Opened "Winter drop"</div>
+                  <div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-brand-500"></span>Added to cart</div>
+                  <div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-ink-300"></span>Abandoned · queued reminder</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -159,7 +198,7 @@
         <h2 class="text-4xl md:text-5xl font-black tracking-tight">Ready to make every message count?</h2>
         <p class="mt-4 text-lg text-white/80 max-w-2xl mx-auto">Spin up a workspace in under a minute. Import customers, build a segment, and send your first campaign today.</p>
         <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-          <NuxtLink to="/signup" class="bg-white text-brand-500 font-semibold px-8 py-3.5 rounded-lg hover:bg-ink-50 transition-colors">Start free</NuxtLink>
+          <NuxtLink to="/signup" class="bg-white !text-brand-500 font-semibold px-8 py-3.5 rounded-lg hover:bg-ink-50 transition-colors dark:!bg-white dark:hover:!bg-ink-50">Start free</NuxtLink>
           <a href="mailto:sales@pulse.app" class="border border-white/30 text-white px-8 py-3.5 rounded-lg hover:bg-white/10 transition-colors">Talk to sales</a>
         </div>
       </div>

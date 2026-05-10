@@ -1,5 +1,6 @@
 <template>
   <div class="min-h-screen bg-ink-50 dark:bg-[color:var(--surface-app)]">
+    <NetworkIndicator/>
     <aside class="fixed top-0 left-0 bottom-0 w-64 bg-white dark:bg-[color:var(--surface-card)] border-r border-ink-100 dark:border-[color:var(--border-subtle)] flex flex-col z-40">
       <div class="px-4 py-4 border-b border-ink-100 dark:border-[color:var(--border-subtle)] shrink-0">
         <div class="flex items-center gap-2 mb-3">
@@ -11,17 +12,23 @@
             <div class="text-[10px] text-ink-500 uppercase tracking-wider">Engagement Cloud</div>
           </div>
         </div>
+        <div v-if="auth.workspace" class="flex items-center gap-1 mb-2 p-0.5 rounded-lg bg-ink-50 dark:bg-[color:var(--surface-muted)] border border-ink-100 dark:border-[color:var(--border-subtle)]">
+          <button @click="switchEnv('production')" class="flex-1 text-[11px] font-semibold py-1 rounded-md transition" :class="auth.workspace.environment !== 'test' ? 'bg-white dark:bg-[color:var(--surface-card)] text-ink-900 dark:text-[color:var(--text-primary)] shadow-sm' : 'text-ink-500 dark:text-[color:var(--text-tertiary)]'">Production</button>
+          <button @click="switchEnv('test')" class="flex-1 text-[11px] font-semibold py-1 rounded-md transition flex items-center justify-center gap-1" :class="auth.workspace.environment === 'test' ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-900 dark:text-amber-300 shadow-sm' : 'text-ink-500 dark:text-[color:var(--text-tertiary)]'">
+            <span class="w-1.5 h-1.5 rounded-full" :class="auth.workspace.environment === 'test' ? 'bg-amber-500' : 'bg-ink-300'"></span>Test
+          </button>
+        </div>
         <div class="relative">
           <button @click="wsOpen = !wsOpen" class="w-full flex items-center gap-2 p-2 rounded-lg border border-ink-100 hover:bg-ink-50 text-left">
             <div class="w-7 h-7 rounded-md flex items-center justify-center text-white text-xs font-bold shrink-0" :style="{ background: auth.workspace?.brand_primary || '#3087B9' }">{{ (auth.workspace?.name || 'W')[0].toUpperCase() }}</div>
             <div class="flex-1 min-w-0">
               <div class="text-xs font-semibold text-ink-900 truncate">{{ auth.workspace?.name || 'Workspace' }}</div>
-              <div class="text-[10px] text-ink-500 truncate">{{ auth.workspaces.length }} workspace{{ auth.workspaces.length === 1 ? '' : 's' }}</div>
+              <div class="text-[10px] text-ink-500 truncate">{{ productionWorkspaces.length }} workspace{{ productionWorkspaces.length === 1 ? '' : 's' }}</div>
             </div>
             <Icon name="chevronDown" class="w-3 h-3 text-ink-500"/>
           </button>
           <div v-if="wsOpen" class="absolute left-0 right-0 top-full mt-1 bg-white rounded-lg border border-ink-100 shadow-soft z-50 max-h-72 overflow-y-auto">
-            <button v-for="w in auth.workspaces" :key="w.id" @click="pick(w.id)"
+            <button v-for="w in productionWorkspaces" :key="w.id" @click="pick(w.id)"
               class="w-full flex items-center gap-2 p-2 hover:bg-ink-50 text-left border-b border-ink-100 last:border-0">
               <div class="w-6 h-6 rounded flex items-center justify-center text-white text-[10px] font-bold" :style="{ background: w.brand_primary || '#3087B9' }">{{ (w.name || 'W')[0].toUpperCase() }}</div>
               <div class="flex-1 min-w-0">
@@ -141,12 +148,17 @@ const initials = computed(() => (auth.user?.email || 'U').slice(0, 2).toUpperCas
 const wsOpen = ref(false)
 const notifOpen = ref(false)
 const notifications = ref<any[]>([])
+const productionWorkspaces = computed(() => auth.workspaces.filter((w: any) => w.environment !== 'test'))
 const unreadCount = computed(() => notifications.value.filter((n: any) => !n.is_read).length)
 
 async function pick(id: string) {
   wsOpen.value = false
   if (id === auth.workspace?.id) return
   await auth.setActiveWorkspace(id)
+}
+
+async function switchEnv(env: 'production' | 'test') {
+  await (auth as any).switchEnvironment(env)
 }
 
 async function loadNotifications() {

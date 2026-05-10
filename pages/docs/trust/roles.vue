@@ -26,10 +26,6 @@
       <li>Changing deliverability policies.</li>
     </ul>
     <p>When a request is submitted, eligible approvers (owners, admins, or any custom role with <code>approvals:review</code>) receive a notification. Pending requests cannot progress until approved.</p>
-    )
-
-    <h2>Impersonation</h2>
-    <p>Platform admins can impersonate a workspace user for support purposes. Every impersonation session is recorded in the audit log and automatically expires after 1 hour.</p>
   </div>
 </template>
 

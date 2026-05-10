@@ -1,7 +1,14 @@
 <template>
   <div>
-    <h1>Pulse Engagement Cloud</h1>
-    <p class="text-lg">A unified customer engagement platform that combines audience management, multichannel messaging, journey orchestration, deliverability, and commerce analytics in one workspace.</p>
+    <div class="relative overflow-hidden rounded-2xl mb-8 bg-gradient-to-br from-brand-900 via-brand-700 to-brand-500 text-white not-prose">
+      <img src="https://images.pexels.com/photos/3184465/pexels-photo-3184465.jpeg?auto=compress&cs=tinysrgb&w=1600" class="absolute inset-0 w-full h-full object-cover opacity-25" alt=""/>
+      <div class="absolute -right-16 -top-16 w-72 h-72 rounded-full bg-accent-500/30 blur-3xl"></div>
+      <div class="relative px-8 py-10">
+        <div class="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/70">Documentation</div>
+        <h1 class="!text-white !mt-2">Pulse Engagement Cloud</h1>
+        <p class="!text-white/85 max-w-2xl">A unified customer engagement platform that combines audience management, multichannel messaging, journey orchestration, deliverability, and commerce analytics in one workspace.</p>
+      </div>
+    </div>
 
     <div class="callout callout-info">
       <div>

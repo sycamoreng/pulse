@@ -47,11 +47,26 @@
           <div class="font-semibold text-ink-900 mb-4">Branding</div>
           <div class="grid md:grid-cols-2 gap-4">
             <div>
-              <label class="label">Logo URL</label>
-              <input v-model="wsForm.logo_url" class="input" placeholder="https://..."/>
-              <div class="mt-3 w-24 h-24 rounded-xl bg-ink-50 border border-ink-100 flex items-center justify-center overflow-hidden">
-                <img v-if="wsForm.logo_url" :src="wsForm.logo_url" class="w-full h-full object-contain" alt=""/>
-                <Icon v-else name="box" class="w-8 h-8 text-ink-300"/>
+              <label class="label">Workspace logo</label>
+              <div class="flex items-center gap-4">
+                <div class="relative w-24 h-24 rounded-xl bg-ink-50 border border-ink-100 flex items-center justify-center overflow-hidden group">
+                  <img v-if="wsForm.logo_url" :src="wsForm.logo_url" class="w-full h-full object-contain" alt=""/>
+                  <Icon v-else name="box" class="w-8 h-8 text-ink-300"/>
+                  <div v-if="logoUploading" class="absolute inset-0 bg-black/40 flex items-center justify-center">
+                    <div class="w-6 h-6 rounded-full border-2 border-white/30 border-t-white animate-spin"></div>
+                  </div>
+                </div>
+                <div class="flex-1 min-w-0 space-y-2">
+                  <div class="flex gap-2">
+                    <label class="btn-secondary cursor-pointer">
+                      <Icon name="upload"/>Upload
+                      <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" class="hidden" @change="onLogoFile"/>
+                    </label>
+                    <button v-if="wsForm.logo_url" type="button" @click="wsForm.logo_url = ''" class="btn-ghost text-red-600"><Icon name="trash"/>Remove</button>
+                  </div>
+                  <input v-model="wsForm.logo_url" class="input !py-1.5 !text-xs" placeholder="or paste a URL..."/>
+                  <div class="text-[11px] text-ink-500">PNG, JPG, WebP, SVG or GIF. Up to 2 MB.</div>
+                </div>
               </div>
             </div>
             <div class="space-y-3">
@@ -153,13 +168,19 @@
                 </div>
                 <div class="flex items-center gap-2">
                   <button @click="toggleDns(d.id)" class="btn-ghost text-xs">{{ expanded === d.id ? 'Hide DNS' : 'View DNS' }}</button>
+                  <button @click="rotateDkim(d)" class="btn-ghost text-xs">Rotate DKIM</button>
                   <button @click="verifyDomain(d)" class="btn-secondary text-xs" :disabled="d.status === 'verified'">Verify</button>
                   <button @click="removeDomain(d)" class="text-ink-300 hover:text-red-600"><Icon name="trash"/></button>
                 </div>
               </div>
               <div v-if="expanded === d.id" class="border-t border-ink-100 p-4 bg-ink-50/40 space-y-3">
-                <DnsRow type="TXT" host="@" value="v=spf1 include:pulse.email ~all" :status="d.spf_status" label="SPF"/>
-                <DnsRow :type="'CNAME'" :host="`${d.dkim_selector}._domainkey`" :value="`${d.dkim_selector}.dkim.pulse.email`" :status="d.dkim_status" label="DKIM"/>
+                <DnsRow type="TXT" host="@" :value="`v=spf1 include:${d.spf_include || 'amazonses.com'} ~all`" :status="d.spf_status" label="SPF"/>
+                <DnsRow
+                  type="TXT"
+                  :host="`${d.dkim_selector}._domainkey`"
+                  :value="`v=DKIM1; k=rsa; p=${d.dkim_public_key}`"
+                  :status="d.dkim_status" label="DKIM"
+                />
                 <DnsRow type="TXT" host="_dmarc" value="v=DMARC1; p=none; rua=mailto:dmarc@pulse.email" :status="d.dmarc_status" label="DMARC"/>
               </div>
             </div>
@@ -180,12 +201,19 @@
             <tbody>
               <tr v-for="s in senders" :key="s.id" class="hover:bg-ink-50">
                 <td class="table-td">
-                  <div class="font-medium">{{ s.from_name }} <span v-if="s.is_default" class="chip bg-accent-500/10 text-accent-500 ml-1 text-[10px]">default</span></div>
+                  <div class="font-medium flex items-center gap-1">
+                    {{ s.from_name }}
+                    <span v-if="s.is_default" class="chip bg-accent-500/10 text-accent-500 ml-1 text-[10px]">default</span>
+                    <span class="chip text-[10px] ml-1" :class="s.verified ? 'bg-accent-500/10 text-accent-500' : 'bg-yellow-100 text-yellow-700'">
+                      {{ s.verified ? 'verified' : s.verification_sent_at ? 'pending' : 'unverified' }}
+                    </span>
+                  </div>
                   <div class="text-xs text-ink-500 font-mono">{{ s.from_email }}</div>
                 </td>
                 <td class="table-td text-xs text-ink-500 font-mono">{{ s.reply_to || '—' }}</td>
                 <td class="table-td text-xs text-ink-500">{{ domainFor(s.domain_id) }}</td>
                 <td class="table-td text-right">
+                  <button v-if="!s.verified" @click="sendSenderVerification(s)" class="text-xs text-brand-500 font-semibold mr-3">{{ s.verification_sent_at ? 'Resend' : 'Verify' }}</button>
                   <button v-if="!s.is_default" @click="makeDefault(s)" class="text-xs text-brand-500 font-semibold mr-3">Make default</button>
                   <button @click="removeSender(s)" class="text-ink-300 hover:text-red-600"><Icon name="trash"/></button>
                 </td>
@@ -640,6 +668,31 @@ const tabs = [
 ]
 const tab = ref('workspace')
 const saving = ref(false)
+const logoUploading = ref(false)
+
+async function onLogoFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (file.size > 2 * 1024 * 1024) { useToast().error('File too large', 'Keep logos under 2 MB.'); input.value = ''; return }
+  if (!auth.workspace?.id) return
+  logoUploading.value = true
+  try {
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase()
+    const path = `${auth.workspace.id}/logo-${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('workspace-logos').upload(path, file, { upsert: true, contentType: file.type })
+    if (error) throw error
+    const { data } = supabase.storage.from('workspace-logos').getPublicUrl(path)
+    wsForm.logo_url = data.publicUrl
+    useToast().success('Logo uploaded')
+  } catch (err: any) {
+    useToast().error('Upload failed', err?.message)
+  } finally {
+    logoUploading.value = false
+    input.value = ''
+  }
+}
+
 const wsForm = reactive({
   name: '', slug: '', industry: '', timezone: 'UTC', website: '',
   logo_url: '', brand_primary: '#3087B9', brand_accent: '#26C165',
@@ -1020,16 +1073,19 @@ async function removeMember(m: any) {
 async function addDomain() {
   const domain = domainInput.value.trim().toLowerCase()
   if (!domain) return
-  const dkim_selector = 'pulse' + Math.floor(Math.random() * 9000 + 1000)
-  const { error } = await supabase.from('email_domains').insert({
-    workspace_id: workspaceId.value, domain, dkim_selector,
-    dkim_public_key: 'v=DKIM1;k=rsa;p=' + Math.random().toString(36).slice(2),
-    return_path: 'bounce.' + domain,
-  })
-  if (error) { toast.error('Could not add domain', error.message); return }
+  const res: any = await notify.domainSetup({ action: 'create', workspace_id: workspaceId.value, domain })
+  if (res?.error) { toast.error('Could not add domain', res.error); return }
   openDomain.value = false
   domainInput.value = ''
   toast.success('Domain added', 'Publish the DNS records to verify ownership.')
+  await loadAll()
+}
+async function rotateDkim(d: any) {
+  const ok = await confirmDialog.ask({ title: `Rotate DKIM for ${d.domain}?`, message: 'You will need to republish the new DKIM TXT record before verification passes.', tone: 'danger', confirmText: 'Rotate keys' })
+  if (!ok) return
+  const res: any = await notify.domainSetup({ action: 'rotate-dkim', domain_id: d.id })
+  if (res?.error) { toast.error('Could not rotate', res.error); return }
+  toast.success('DKIM keypair rotated', 'Update DNS with the new public key.')
   await loadAll()
 }
 function toggleDns(id: string) { expanded.value = expanded.value === id ? null : id }
@@ -1078,6 +1134,12 @@ async function makeDefault(s: any) {
   await supabase.from('email_senders').update({ is_default: false }).eq('workspace_id', workspaceId.value)
   await supabase.from('email_senders').update({ is_default: true }).eq('id', s.id)
   toast.success('Default sender updated')
+  await loadAll()
+}
+async function sendSenderVerification(s: any) {
+  const res: any = await notify.domainSetup({ action: 'send-verification', sender_id: s.id })
+  if (res?.error) { toast.error('Could not send verification', res.error); return }
+  toast.success('Verification email sent', `Ask ${s.from_email} to click the link in the inbox.`)
   await loadAll()
 }
 async function removeSender(s: any) {
@@ -1172,4 +1234,17 @@ async function purge() {
 }
 
 watch(workspaceId, loadAll, { immediate: true })
+
+onMounted(async () => {
+  const route = useRoute()
+  const senderId = route.query.verify_sender as string | undefined
+  const verifyToken = route.query.token as string | undefined
+  if (senderId && verifyToken) {
+    const res: any = await notify.domainSetup({ action: 'confirm-sender', sender_id: senderId }, { 'X-Verify-Token': verifyToken })
+    if (res?.ok) toast.success('Sender address verified')
+    else toast.error('Verification failed', res?.error || 'Invalid or expired link')
+    await navigateTo('/settings')
+    await loadAll()
+  }
+})
 </script>

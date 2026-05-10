@@ -13,9 +13,13 @@
       </div>
 
       <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div v-for="t in filtered" :key="t.id" class="card hover:shadow-md cursor-pointer overflow-hidden" @click="edit(t)">
-          <div class="bg-gradient-to-br from-brand-700 to-brand-500 h-24 flex items-center justify-center text-white">
-            <Icon :name="channelIcon(t.channel)" class="w-8 h-8"/>
+        <div v-for="t in filtered" :key="t.id" class="card hover:shadow-md cursor-pointer overflow-hidden group transition-all hover:-translate-y-0.5" @click="edit(t)">
+          <div class="relative h-28 flex items-center justify-center text-white overflow-hidden" :class="channelGradient(t.channel)">
+            <img :src="channelThumb(t.channel, t.category)" class="absolute inset-0 w-full h-full object-cover opacity-30 group-hover:opacity-40 group-hover:scale-105 transition-all duration-500" alt=""/>
+            <div class="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent"></div>
+            <div class="relative w-12 h-12 rounded-xl bg-white/15 backdrop-blur border border-white/20 flex items-center justify-center">
+              <Icon :name="channelIcon(t.channel)" class="w-6 h-6"/>
+            </div>
           </div>
           <div class="p-4">
             <div class="flex items-center justify-between">
@@ -126,6 +130,23 @@ const ampEnabled = ref(false)
 
 const filtered = computed(() => filter.value ? templates.value.filter(t => t.channel === filter.value) : templates.value)
 const channelIcon = (c: string) => ({ email: 'mail', push: 'bell', sms: 'smartphone', whatsapp: 'smartphone', inapp: 'smartphone', onsite: 'monitor' }[c] || 'mail')
+const channelGradient = (c: string) => ({
+  email: 'bg-gradient-to-br from-brand-700 to-brand-500',
+  push: 'bg-gradient-to-br from-accent-600 to-accent-500',
+  sms: 'bg-gradient-to-br from-emerald-700 to-emerald-500',
+  whatsapp: 'bg-gradient-to-br from-green-700 to-green-500',
+  inapp: 'bg-gradient-to-br from-rose-700 to-rose-500',
+  onsite: 'bg-gradient-to-br from-amber-700 to-amber-500',
+}[c] || 'bg-gradient-to-br from-brand-700 to-brand-500')
+const categoryImages: Record<string, string> = {
+  onboarding: 'https://images.pexels.com/photos/3184292/pexels-photo-3184292.jpeg?auto=compress&cs=tinysrgb&w=600',
+  conversion: 'https://images.pexels.com/photos/3943716/pexels-photo-3943716.jpeg?auto=compress&cs=tinysrgb&w=600',
+  retention: 'https://images.pexels.com/photos/3184405/pexels-photo-3184405.jpeg?auto=compress&cs=tinysrgb&w=600',
+  transactional: 'https://images.pexels.com/photos/4386321/pexels-photo-4386321.jpeg?auto=compress&cs=tinysrgb&w=600',
+  promotional: 'https://images.pexels.com/photos/5632402/pexels-photo-5632402.jpeg?auto=compress&cs=tinysrgb&w=600',
+  general: 'https://images.pexels.com/photos/3184418/pexels-photo-3184418.jpeg?auto=compress&cs=tinysrgb&w=600',
+}
+const channelThumb = (_c: string, cat: string) => categoryImages[cat] || categoryImages.general
 
 const previewContext = computed(() => {
   const cust = previewCustomers.value.find((c: any) => c.id === previewCustomerId.value)

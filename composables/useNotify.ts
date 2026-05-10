@@ -42,5 +42,20 @@ export const useNotify = () => {
     }
   }
 
-  return { notify, verifyDomain }
+  async function domainSetup(payload: Record<string, unknown>, extraHeaders: Record<string, string> = {}) {
+    try {
+      const { data: { session } } = await useNuxtApp().$supabase.auth.getSession()
+      const token = session?.access_token || supabaseAnonKey
+      const res = await fetch(`${supabaseUrl}/functions/v1/domain-setup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, ...extraHeaders },
+        body: JSON.stringify(payload),
+      })
+      return await res.json()
+    } catch (e) {
+      return { ok: false, error: String(e) }
+    }
+  }
+
+  return { notify, verifyDomain, domainSetup }
 }

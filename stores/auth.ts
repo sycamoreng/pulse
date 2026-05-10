@@ -90,13 +90,52 @@ export const useAuthStore = defineStore('auth', {
       const wsName = name || (this.user.email?.split('@')[0] + "'s Workspace")
       const slug = `ws-${Math.random().toString(36).slice(2, 8)}`
       const { data: ws, error } = await $supabase.from('workspaces').insert({
-        name: wsName, slug, owner_id: this.user.id
+        name: wsName, slug, owner_id: this.user.id, environment: 'production'
       }).select().maybeSingle()
       if (error) { console.error('createWorkspace error', error); throw error }
       if (!ws) return null
-      this.workspaces = [...this.workspaces, ws]
+      const { data: testWs } = await $supabase.from('workspaces').insert({
+        name: `${wsName} (Test)`,
+        slug: `${slug}-test`,
+        owner_id: this.user.id,
+        environment: 'test',
+        parent_workspace_id: ws.id,
+        brand_primary: ws.brand_primary,
+        brand_accent: ws.brand_accent,
+        demo_seeded: true,
+      }).select().maybeSingle()
+      this.workspaces = [...this.workspaces, ws, ...(testWs ? [testWs] : [])]
       await this.setActiveWorkspace(ws.id)
       return ws
+    },
+    async switchEnvironment(env: 'production' | 'test') {
+      const current = this.workspace
+      if (!current) return
+      if (current.environment === env) return
+      let target: any = null
+      if (env === 'test') {
+        target = this.workspaces.find((w: any) => w.parent_workspace_id === current.id && w.environment === 'test')
+        if (!target) {
+          const { $supabase } = useNuxtApp()
+          const { data: testWs } = await $supabase.from('workspaces').insert({
+            name: `${current.name} (Test)`,
+            slug: `${current.slug}-test`,
+            owner_id: this.user.id,
+            environment: 'test',
+            parent_workspace_id: current.id,
+            brand_primary: current.brand_primary,
+            brand_accent: current.brand_accent,
+            demo_seeded: true,
+          }).select().maybeSingle()
+          if (testWs) {
+            this.workspaces = [...this.workspaces, testWs]
+            target = testWs
+          }
+        }
+      } else {
+        target = this.workspaces.find((w: any) => w.id === current.parent_workspace_id && w.environment === 'production')
+      }
+      if (target) await this.setActiveWorkspace(target.id)
     },
     async signOut() {
       const { $supabase } = useNuxtApp()

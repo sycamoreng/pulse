@@ -16,6 +16,10 @@ const rounded = props.rounded || 'rounded-md'
   animation: shimmer 1.4s infinite ease-in-out;
   display: block;
 }
+:global(.dark) .shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.10) 40%, rgba(255,255,255,0.04) 80%);
+  background-size: 200% 100%;
+}
 @keyframes shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }

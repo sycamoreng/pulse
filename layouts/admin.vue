@@ -1,5 +1,6 @@
 <template>
   <div class="min-h-screen bg-ink-50">
+    <NetworkIndicator/>
     <aside class="fixed left-0 top-0 bottom-0 w-60 bg-ink-900 text-white flex flex-col">
       <div class="px-5 py-5 border-b border-white/10">
         <div class="flex items-center gap-2">

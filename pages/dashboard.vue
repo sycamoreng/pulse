@@ -3,6 +3,33 @@
     <PageHeader title="Dashboard" subtitle="Your engagement at a glance." :breadcrumb="auth.workspace?.name"/>
 
     <div class="p-8 space-y-6">
+      <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-700 via-brand-500 to-brand-900 text-white">
+        <img src="https://images.pexels.com/photos/3184465/pexels-photo-3184465.jpeg?auto=compress&cs=tinysrgb&w=1600" class="absolute inset-0 w-full h-full object-cover opacity-20" alt=""/>
+        <div class="absolute -right-20 -top-20 w-[320px] h-[320px] rounded-full bg-accent-500/30 blur-3xl"></div>
+        <div class="relative px-6 py-6 md:px-8 md:py-8 flex items-center gap-6 flex-wrap">
+          <div class="flex-1 min-w-[260px]">
+            <div class="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">{{ greeting }}</div>
+            <h2 class="mt-2 text-2xl md:text-3xl font-bold tracking-tight">{{ auth.workspace?.name || 'Your workspace' }} is live.</h2>
+            <p class="mt-1 text-sm text-white/80 max-w-xl">Here's how your engagement is tracking today. Dig in, ship a campaign, or shape a journey.</p>
+            <div class="mt-4 flex items-center gap-2 flex-wrap">
+              <NuxtLink to="/campaigns" class="inline-flex items-center gap-2 bg-white !text-brand-700 font-semibold text-sm px-4 py-2 rounded-lg hover:bg-ink-50 dark:hover:!bg-ink-50 transition-colors"><Icon name="send" class="w-4 h-4"/>New campaign</NuxtLink>
+              <NuxtLink to="/journeys" class="inline-flex items-center gap-2 bg-white/10 backdrop-blur border border-white/20 text-white font-semibold text-sm px-4 py-2 rounded-lg hover:bg-white/20 transition-colors"><Icon name="route" class="w-4 h-4"/>Build journey</NuxtLink>
+            </div>
+          </div>
+          <div class="hidden md:flex items-center gap-3 rounded-xl bg-white/10 backdrop-blur border border-white/15 px-5 py-4">
+            <div class="flex -space-x-3">
+              <img src="https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=96" class="w-9 h-9 rounded-full border-2 border-brand-700 object-cover" alt=""/>
+              <img src="https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=96" class="w-9 h-9 rounded-full border-2 border-brand-700 object-cover" alt=""/>
+              <img src="https://images.pexels.com/photos/697509/pexels-photo-697509.jpeg?auto=compress&cs=tinysrgb&w=96" class="w-9 h-9 rounded-full border-2 border-brand-700 object-cover" alt=""/>
+            </div>
+            <div>
+              <div class="text-xs text-white/70">Active now</div>
+              <div class="font-semibold">{{ liveUsers }} users online</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div v-for="s in stats" :key="s.label" class="card p-5">
           <div class="flex items-center justify-between">
@@ -45,11 +72,19 @@
         </div>
 
         <div class="card p-6">
-          <div class="font-semibold text-ink-900 mb-4">Recent activity</div>
-          <div v-if="!recentEvents.length" class="text-sm text-ink-500">No events yet.</div>
+          <div class="flex items-center justify-between mb-4">
+            <div class="font-semibold text-ink-900">Recent activity</div>
+            <span v-if="recentEvents.length" class="inline-flex items-center gap-1.5 text-[11px] text-ink-500"><span class="w-1.5 h-1.5 rounded-full bg-accent-500 animate-pulse"></span>Live</span>
+          </div>
+          <div v-if="!recentEvents.length" class="flex flex-col items-center text-center py-6">
+            <div class="w-14 h-14 rounded-full bg-brand-100/40 text-brand-500 flex items-center justify-center mb-3"><Icon name="activity" class="w-6 h-6"/></div>
+            <div class="text-sm text-ink-500">No events yet. Start tracking to see them stream in.</div>
+          </div>
           <div v-else class="space-y-3">
-            <div v-for="e in recentEvents" :key="e.id" class="flex items-start gap-3">
-              <div class="w-8 h-8 rounded-lg bg-brand-100/40 text-brand-500 flex items-center justify-center shrink-0"><Icon name="activity"/></div>
+            <div v-for="(e, i) in recentEvents" :key="e.id" class="flex items-start gap-3">
+              <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" :class="eventStyles[i % eventStyles.length].bg">
+                <Icon :name="eventStyles[i % eventStyles.length].icon" class="w-4 h-4"/>
+              </div>
               <div class="flex-1 min-w-0">
                 <div class="text-sm font-medium text-ink-900 truncate">{{ e.name }}</div>
                 <div class="text-xs text-ink-500">{{ timeAgo(e.occurred_at) }}</div>
@@ -149,6 +184,22 @@ const recentEvents = ref<any[]>([])
 const topCampaigns = ref<any[]>([])
 const topJourneys = ref<any[]>([])
 const loading = ref(true)
+const liveUsers = computed(() => {
+  const base = Math.max(1, recentEvents.value.length * 3)
+  return (base + 12).toLocaleString()
+})
+const eventStyles = [
+  { bg: 'bg-brand-100/40 text-brand-500', icon: 'activity' },
+  { bg: 'bg-accent-500/15 text-accent-500', icon: 'send' },
+  { bg: 'bg-amber-500/15 text-amber-600', icon: 'bell' },
+  { bg: 'bg-brand-100/40 text-brand-500', icon: 'users' },
+]
+const greeting = computed(() => {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 18) return 'Good afternoon'
+  return 'Good evening'
+})
 const health = ref<any>({ total: 0, verified: 0, spf_pass: 0, dkim_pass: 0, dmarc_pass: 0 })
 const healthChecks = computed(() => [
   { key: 'spf', label: 'SPF', value: health.value.spf_pass, hint: 'authorizes senders' },

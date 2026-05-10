@@ -33,7 +33,7 @@
               </div>
             </div>
             <div class="flex items-center gap-2">
-              <span v-if="pushStatusFor(a)" class="chip bg-accent-500/10 text-accent-500 text-[10px]">push</span>
+              <span v-if="pushStatusFor(a)" class="chip bg-accent-500/10 text-accent-500 text-[10px]">{{ pushLabel(a) }}</span>
               <button @click="remove(a)" class="text-ink-300 hover:text-red-600"><Icon name="trash"/></button>
             </div>
           </div>
@@ -45,7 +45,7 @@
             </div>
           </div>
           <div v-if="a.bundle_id" class="mt-3 text-xs text-ink-500">Bundle: <span class="font-mono">{{ a.bundle_id }}</span></div>
-          <button @click="openPush(a)" class="btn-secondary w-full mt-4 text-xs"><Icon name="send"/>{{ pushStatusFor(a) ? 'Update push credentials' : 'Configure push' }}</button>
+          <button @click="openPush(a)" class="btn-secondary w-full mt-4 text-xs"><Icon name="send"/>{{ pushStatusFor(a) ? 'Update push credentials' : `Configure ${pushChannelFor(a)}` }}</button>
         </div>
       </div>
 
@@ -108,24 +108,45 @@ client.newCall(req).execute()</code></pre>
       </div>
     </div>
 
-    <Modal v-model="pushOpen" :title="`Push credentials · ${pushForm.app_name}`" subtitle="Configure FCM or APNs keys used to send push notifications." size="lg">
+    <Modal v-model="pushOpen" :title="`Push credentials · ${pushForm.app_name}`" :subtitle="pushModalSubtitle" size="lg">
       <form id="pushf" @submit.prevent="savePush" class="space-y-3">
-        <div class="flex gap-2">
-          <button type="button" @click="pushForm.push_platform = 'fcm'" class="btn-secondary flex-1" :class="pushForm.push_platform === 'fcm' ? '!border-brand-500 !text-brand-500' : ''">
-            <Icon name="smartphone"/>Firebase (Android)
-          </button>
-          <button type="button" @click="pushForm.push_platform = 'apns'" class="btn-secondary flex-1" :class="pushForm.push_platform === 'apns' ? '!border-brand-500 !text-brand-500' : ''">
-            <Icon name="smartphone"/>APNs (iOS)
-          </button>
-        </div>
-        <div v-if="pushForm.push_platform === 'fcm'" class="space-y-3">
+        <div v-if="pushForm.push_platform === 'web_push'" class="space-y-3">
+          <div class="callout callout-info text-xs">
+            <div>Web Push uses the <strong>VAPID</strong> protocol (RFC 8292). It works natively in Chrome, Edge, Firefox, Opera, and Safari 16+. No Firebase account is required.</div>
+          </div>
           <div>
-            <label class="label">FCM server key *</label>
-            <textarea v-model="pushForm.fcm_server_key" class="input font-mono text-xs" rows="4" placeholder="AAAA..." required></textarea>
-            <div class="text-xs text-ink-500 mt-1">Find it in Firebase Console → Project Settings → Cloud Messaging → Server key.</div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="label !mb-0">VAPID public key *</label>
+              <button type="button" @click="generateVapid" class="text-xs text-brand-500 hover:underline" :disabled="generatingVapid">{{ generatingVapid ? 'Generating…' : 'Generate new pair' }}</button>
+            </div>
+            <textarea v-model="pushForm.vapid_public_key" class="input font-mono text-xs" rows="2" required placeholder="BL... (base64url, 65 bytes uncompressed)"></textarea>
+            <div class="text-xs text-ink-500 mt-1">Ship this key to the browser when calling <code>pushManager.subscribe</code>.</div>
+          </div>
+          <div>
+            <label class="label">VAPID private key *</label>
+            <textarea v-model="pushForm.vapid_private_key" class="input font-mono text-xs" rows="2" required placeholder="private key (base64url)"></textarea>
+            <div class="text-xs text-ink-500 mt-1">Kept server-side only and used to sign each push.</div>
+          </div>
+          <div>
+            <label class="label">Subject *</label>
+            <input v-model="pushForm.vapid_subject" class="input font-mono text-xs" required placeholder="mailto:deliverability@yourcompany.com"/>
+            <div class="text-xs text-ink-500 mt-1">Contact URL or mailto that browser push services can reach out to.</div>
           </div>
         </div>
-        <div v-if="pushForm.push_platform === 'apns'" class="space-y-3">
+        <div v-else-if="pushForm.push_platform === 'fcm'" class="space-y-3">
+          <div class="callout callout-info text-xs">
+            <div>FCM is used for <strong>Android</strong> native apps. Use a Firebase v1 Server Key or OAuth service account JSON.</div>
+          </div>
+          <div>
+            <label class="label">FCM server key *</label>
+            <textarea v-model="pushForm.fcm_server_key" class="input font-mono text-xs" rows="4" placeholder="AAAA... or full service-account JSON" required></textarea>
+            <div class="text-xs text-ink-500 mt-1">Firebase Console → Project Settings → Cloud Messaging → Server key (or upload the HTTP v1 service-account JSON).</div>
+          </div>
+        </div>
+        <div v-else-if="pushForm.push_platform === 'apns'" class="space-y-3">
+          <div class="callout callout-info text-xs">
+            <div>APNs is used for <strong>iOS</strong> native apps. Requires a .p8 auth key with the APNs capability.</div>
+          </div>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="label">Team ID *</label><input v-model="pushForm.apns_team_id" class="input font-mono" required placeholder="ABCDEF1234"/></div>
             <div><label class="label">Key ID *</label><input v-model="pushForm.apns_key_id" class="input font-mono" required placeholder="XYZ1234567"/></div>
@@ -221,17 +242,48 @@ async function remove(a: any) {
 async function copy(t?: string) { if (t) await navigator.clipboard.writeText(t) }
 
 const pushOpen = ref(false)
-const pushForm = reactive({ id: '', app_name: '', push_platform: 'fcm', fcm_server_key: '', apns_team_id: '', apns_key_id: '', apns_bundle_id: '', apns_p8: '' })
-function pushStatusFor(a: any) { return !!(a.fcm_server_key || a.apns_p8) }
+const generatingVapid = ref(false)
+const pushForm = reactive({
+  id: '', app_name: '', platform: 'web', push_platform: 'web_push',
+  fcm_server_key: '', apns_team_id: '', apns_key_id: '', apns_bundle_id: '', apns_p8: '',
+  vapid_public_key: '', vapid_private_key: '', vapid_subject: '',
+})
+function pushChannelFor(a: any): string {
+  if (a.platform === 'web') return 'Web Push'
+  if (a.platform === 'ios') return 'APNs'
+  if (a.platform === 'android') return 'FCM'
+  return 'push'
+}
+function pushLabel(a: any): string {
+  if (a.vapid_public_key) return 'web push'
+  if (a.apns_p8) return 'apns'
+  if (a.fcm_server_key) return 'fcm'
+  return 'push'
+}
+function pushStatusFor(a: any) { return !!(a.fcm_server_key || a.apns_p8 || a.vapid_public_key) }
+const pushModalSubtitle = computed(() => {
+  if (pushForm.push_platform === 'web_push') return 'Configure VAPID keys for browser Web Push.'
+  if (pushForm.push_platform === 'fcm') return 'Configure Firebase Cloud Messaging for Android.'
+  if (pushForm.push_platform === 'apns') return 'Configure Apple Push Notification service for iOS.'
+  return ''
+})
+function defaultPushPlatform(platform: string): 'web_push' | 'fcm' | 'apns' {
+  if (platform === 'ios') return 'apns'
+  if (platform === 'android') return 'fcm'
+  return 'web_push'
+}
 function openPush(a: any) {
   Object.assign(pushForm, {
-    id: a.id, app_name: a.name,
-    push_platform: a.push_platform || (a.platform === 'ios' ? 'apns' : 'fcm'),
+    id: a.id, app_name: a.name, platform: a.platform,
+    push_platform: a.push_platform || defaultPushPlatform(a.platform),
     fcm_server_key: a.fcm_server_key || '',
     apns_team_id: a.apns_team_id || '',
     apns_key_id: a.apns_key_id || '',
     apns_bundle_id: a.apns_bundle_id || a.bundle_id || '',
     apns_p8: a.apns_p8 || '',
+    vapid_public_key: a.vapid_public_key || '',
+    vapid_private_key: a.vapid_private_key || '',
+    vapid_subject: a.vapid_subject || '',
   })
   pushOpen.value = true
 }
@@ -240,17 +292,45 @@ async function readP8(ev: Event) {
   if (!f) return
   pushForm.apns_p8 = await f.text()
 }
+function b64url(buf: ArrayBuffer) {
+  const bytes = new Uint8Array(buf)
+  let s = ''
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i])
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+async function generateVapid() {
+  generatingVapid.value = true
+  try {
+    const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign','verify'])
+    const pub = await crypto.subtle.exportKey('raw', kp.publicKey)
+    const priv = await crypto.subtle.exportKey('jwk', kp.privateKey)
+    pushForm.vapid_public_key = b64url(pub)
+    pushForm.vapid_private_key = priv.d || ''
+    if (!pushForm.vapid_subject) pushForm.vapid_subject = 'mailto:deliverability@example.com'
+    useToast().success('VAPID keys generated')
+  } catch (e: any) {
+    useToast().error('Could not generate keys', e.message)
+  } finally {
+    generatingVapid.value = false
+  }
+}
 async function savePush() {
-  const payload: any = { push_platform: pushForm.push_platform }
-  if (pushForm.push_platform === 'fcm') {
+  const payload: any = {
+    push_platform: pushForm.push_platform,
+    fcm_server_key: '', apns_p8: '', apns_team_id: '', apns_key_id: '', apns_bundle_id: '',
+    vapid_public_key: '', vapid_private_key: '', vapid_subject: '',
+  }
+  if (pushForm.push_platform === 'web_push') {
+    payload.vapid_public_key = pushForm.vapid_public_key
+    payload.vapid_private_key = pushForm.vapid_private_key
+    payload.vapid_subject = pushForm.vapid_subject
+  } else if (pushForm.push_platform === 'fcm') {
     payload.fcm_server_key = pushForm.fcm_server_key
-    payload.apns_p8 = ''
-  } else {
+  } else if (pushForm.push_platform === 'apns') {
     payload.apns_team_id = pushForm.apns_team_id
     payload.apns_key_id = pushForm.apns_key_id
     payload.apns_bundle_id = pushForm.apns_bundle_id
     payload.apns_p8 = pushForm.apns_p8
-    payload.fcm_server_key = ''
   }
   const { error } = await supabase.from('apps').update(payload).eq('id', pushForm.id)
   if (error) { useToast().error('Could not save', error.message); return }

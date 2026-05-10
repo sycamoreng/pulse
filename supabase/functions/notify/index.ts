@@ -236,9 +236,13 @@ Deno.serve(async (req: Request) => {
         .eq("is_default", true)
         .maybeSingle();
 
+      const platformFromEmail = Deno.env.get("PULSE_DEFAULT_FROM_EMAIL") || "";
+      const platformFromName = Deno.env.get("PULSE_DEFAULT_FROM_NAME") || "Pulse";
       const from = sender?.from_email
         ? `${sender.from_name || ws?.name || "Pulse"} <${sender.from_email}>`
-        : `Pulse <notifications@pulse.app>`;
+        : platformFromEmail
+          ? `${platformFromName} <${platformFromEmail}>`
+          : "";
       const subject = payload.title;
       const html = renderEmail(payload.title, payload.body || "", payload.link, brand);
 
@@ -249,15 +253,22 @@ Deno.serve(async (req: Request) => {
 
       if (!domainOk) {
         status = "skipped"; errorText = "Sending domain not verified";
+      } else if (!from) {
+        status = "skipped";
+        errorText = "No sender configured. Set a default sender in workspace settings, or set PULSE_DEFAULT_FROM_EMAIL for platform-originated mail.";
       } else if (!provider) {
-        // Fallback to platform-wide Resend if no tenant provider
-        const resendKey = Deno.env.get("RESEND_API_KEY") || "";
-        if (resendKey) {
-          const r = await sendViaResend(resendKey, from, payload.to_email, subject, html);
+        // Platform default: Pulse-owned SES account handles all tenants.
+        const key = Deno.env.get("SES_CLIENT_A") || "";
+        const secret = Deno.env.get("SES_CLIENT_A_SECRET") || "";
+        const region = Deno.env.get("PULSE_SES_REGION") || "us-east-1";
+        const configSet = Deno.env.get("PULSE_SES_CONFIG_SET") || "";
+        if (!key || !secret) {
+          status = "logged";
+          errorText = "Platform SES credentials not configured (SES_CLIENT_A / SES_CLIENT_A_SECRET)";
+        } else {
+          const r = await sendViaSes(key, secret, region, configSet, from, payload.to_email, subject, html);
           status = r.ok ? "sent" : "failed";
           provider_message_id = r.id; errorText = r.error;
-        } else {
-          status = "logged"; errorText = "No provider configured and no platform fallback key";
         }
       } else {
         const secretName = provider.credentials_secret_name || "";

@@ -69,7 +69,7 @@
     </ul>
     <h3>Governance</h3>
     <ul>
-      <li><code>audit_logs</code>, <code>approvals</code>, <code>notifications</code>, <code>platform_admins</code></li>
+      <li><code>audit_logs</code>, <code>approvals</code>, <code>notifications</code></li>
     </ul>
 
     <h2>Row Level Security</h2>

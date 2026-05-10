@@ -30,6 +30,8 @@
       </div>
     </div>
     <div class="hidden lg:flex flex-1 bg-brand-900 text-white p-16 flex-col justify-between relative overflow-hidden">
+      <img src="https://images.pexels.com/photos/3183150/pexels-photo-3183150.jpeg?auto=compress&cs=tinysrgb&w=1600" class="absolute inset-0 w-full h-full object-cover opacity-20" alt=""/>
+      <div class="absolute inset-0 bg-gradient-to-br from-brand-900/92 via-brand-900/80 to-brand-700/70"></div>
       <div class="relative z-10">
         <div class="text-xs font-semibold uppercase tracking-wider text-brand-100/70">What's included</div>
         <ul class="mt-6 space-y-3 text-brand-100">
@@ -39,6 +41,15 @@
           <li class="flex items-start gap-2"><Icon name="check" class="text-accent-500 mt-0.5"/> SDK keys for iOS, Android & Web</li>
           <li class="flex items-start gap-2"><Icon name="check" class="text-accent-500 mt-0.5"/> CSV import with column mapping</li>
         </ul>
+      </div>
+      <div class="relative z-10">
+        <div class="flex -space-x-3">
+          <img src="https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=96" class="w-10 h-10 rounded-full border-2 border-brand-900 object-cover" alt=""/>
+          <img src="https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=96" class="w-10 h-10 rounded-full border-2 border-brand-900 object-cover" alt=""/>
+          <img src="https://images.pexels.com/photos/697509/pexels-photo-697509.jpeg?auto=compress&cs=tinysrgb&w=96" class="w-10 h-10 rounded-full border-2 border-brand-900 object-cover" alt=""/>
+          <div class="w-10 h-10 rounded-full border-2 border-brand-900 bg-white/15 backdrop-blur flex items-center justify-center text-[10px] font-bold">+2k</div>
+        </div>
+        <div class="text-sm text-brand-100/80 mt-3">Joined by 2,000+ product teams this month.</div>
       </div>
       <div class="absolute -right-20 -bottom-20 w-[500px] h-[500px] rounded-full bg-brand-500/30 blur-3xl"></div>
     </div>

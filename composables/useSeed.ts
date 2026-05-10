@@ -7,65 +7,10 @@ export const useSeed = () => {
       industry: 'fintech',
     }).eq('id', wid)
 
-    const first = ['Ada','Emeka','Ngozi','Tunde','Chidi','Amaka','Sade','Yemi','Kunle','Bola','Ifeoma','Uche','Femi','Obinna','Zainab','Aisha','Halima','Tobi','Seun','Chioma','Nneka','Ikenna','Folake','Musa','Bisi','Damilola','Ebuka']
-    const last = ['Okafor','Balogun','Adeyemi','Okonkwo','Nwosu','Eze','Adekunle','Adebayo','Obi','Oluwaseun','Ibrahim','Mohammed','Bello','Ogunleye','Afolabi','Udoh','Akpan','Chukwu','Olanrewaju']
-    const cities = [
-      { city: 'Lagos', state: 'LA' },
-      { city: 'Abuja', state: 'FC' },
-      { city: 'Port Harcourt', state: 'RI' },
-      { city: 'Ibadan', state: 'OY' },
-      { city: 'Kano', state: 'KN' },
-      { city: 'Benin City', state: 'ED' },
-      { city: 'Enugu', state: 'EN' },
-      { city: 'Kaduna', state: 'KD' },
-      { city: 'Warri', state: 'DE' },
-      { city: 'Owerri', state: 'IM' },
-    ]
-    const seen = new Set<string>()
-    const customers: any[] = []
-    while (customers.length < 80) {
-      const f = first[Math.floor(Math.random()*first.length)]
-      const l = last[Math.floor(Math.random()*last.length)]
-      const ext = `${f}.${l}.${Math.floor(Math.random()*100000)}`.toLowerCase()
-      if (seen.has(ext)) continue
-      seen.add(ext)
-      const cityRow = cities[Math.floor(Math.random()*cities.length)]
-      const kycTier = Math.random() < 0.15 ? 1 : Math.random() < 0.6 ? 2 : 3
-      const balance = kycTier === 1
-        ? Math.floor(Math.random() * 50_000)
-        : kycTier === 2
-          ? Math.floor(Math.random() * 500_000)
-          : Math.floor(Math.random() * 5_000_000)
-      customers.push({
-        workspace_id: wid,
-        external_id: ext,
-        email: `${ext}@sycamore.ng`,
-        phone: `+234${[700,701,703,704,705,706,707,708,709,802,803,806,807,808,809,810,811,812,813,814,815,816,817,818,819][Math.floor(Math.random()*25)]}${Math.floor(1000000 + Math.random() * 8999999)}`,
-        first_name: f,
-        last_name: l,
-        country: 'NG',
-        city: cityRow.city,
-        device: ['iPhone 15','iPhone 13','Pixel 8','Tecno Camon 20','Infinix Hot 40','Galaxy S24','Galaxy A15','MacBook','Windows PC'][Math.floor(Math.random()*9)],
-        platform: ['ios','android','web'][Math.floor(Math.random()*3)],
-        last_seen_at: new Date(Date.now() - Math.random() * 14*24*3600*1000).toISOString(),
-        attributes: {
-          kyc_tier: kycTier,
-          bvn_verified: kycTier >= 2,
-          nin_verified: kycTier === 3,
-          wallet_balance_ngn: balance,
-          state: cityRow.state,
-          is_premium: balance > 1_000_000,
-          referral_source: ['organic','instagram','twitter','referral','playstore','appstore','tiktok'][Math.floor(Math.random()*7)],
-          signup_channel: ['mobile','web'][Math.floor(Math.random()*2)],
-        },
-      })
-    }
-    const { data: inserted } = await $supabase.from('customers').upsert(customers, { onConflict: 'workspace_id,external_id' }).select('id')
-    let ids: string[] = (inserted || []).map((c: any) => c.id)
-    if (!ids.length) {
-      const { data } = await $supabase.from('customers').select('id').eq('workspace_id', wid).limit(200)
-      ids = (data || []).map((c: any) => c.id)
-    }
+    // Customers and event activity are no longer seeded; workspaces start with
+    // an empty audience. Import via CSV or the track API instead. We still seed
+    // an event catalog so segment/journey builders have useful dropdowns.
+    void cities
 
     const eventNames = [
       'app_opened',
@@ -95,37 +40,6 @@ export const useSeed = () => {
     for (const n of eventNames) {
       await $supabase.from('event_definitions').upsert({ workspace_id: wid, name: n, category: 'behavior' }, { onConflict: 'workspace_id,name' })
     }
-
-    const billers = ['DSTV','GOTV','StarTimes','Ikeja Electric','EKEDC','AEDC','PHED','MTN','Airtel','Glo','9mobile','LAWMA']
-    const events: any[] = []
-    for (let i = 0; i < 900; i++) {
-      const cid = ids[Math.floor(Math.random() * ids.length)]
-      if (!cid) continue
-      const name = eventNames[Math.floor(Math.random()*eventNames.length)]
-      let properties: Record<string, any> = { source: 'mobile' }
-      if (name === 'wallet_funded') {
-        properties = { amount_ngn: [500,1000,2500,5000,10000,25000,50000,100000][Math.floor(Math.random()*8)], method: ['card','bank_transfer','ussd'][Math.floor(Math.random()*3)] }
-      } else if (name === 'transfer_sent' || name === 'transfer_received') {
-        properties = { amount_ngn: Math.floor(500 + Math.random() * 250000), bank: ['GTBank','Access','Zenith','UBA','First Bank','Opay','PalmPay','Kuda','Moniepoint'][Math.floor(Math.random()*9)] }
-      } else if (name === 'bill_paid') {
-        properties = { biller: billers[Math.floor(Math.random()*billers.length)], amount_ngn: Math.floor(500 + Math.random() * 30000) }
-      } else if (name === 'airtime_purchased' || name === 'data_purchased') {
-        properties = { network: ['MTN','Airtel','Glo','9mobile'][Math.floor(Math.random()*4)], amount_ngn: [100,200,500,1000,2000][Math.floor(Math.random()*5)] }
-      } else if (name === 'card_created') {
-        properties = { card_type: Math.random() > 0.5 ? 'virtual' : 'physical', currency: Math.random() > 0.3 ? 'NGN' : 'USD' }
-      } else if (name === 'investment_made') {
-        properties = { product: ['Fixed Yield','Mutual Fund','Treasury Bill'][Math.floor(Math.random()*3)], amount_ngn: Math.floor(10000 + Math.random() * 990000) }
-      } else if (name === 'loan_requested' || name === 'loan_approved' || name === 'loan_repaid') {
-        properties = { amount_ngn: Math.floor(5000 + Math.random() * 495000), tenure_days: [30,60,90,180][Math.floor(Math.random()*4)] }
-      } else if (name === 'savings_plan_created') {
-        properties = { plan: ['SafeLock','Flex','Target','GroupSave'][Math.floor(Math.random()*4)], target_ngn: Math.floor(50000 + Math.random() * 950000) }
-      }
-      events.push({
-        workspace_id: wid, customer_id: cid, name, properties,
-        occurred_at: new Date(Date.now() - Math.random() * 45*24*3600*1000).toISOString(),
-      })
-    }
-    await $supabase.from('events').insert(events)
 
     const segments = [
       { name: 'Lagos customers', description: 'Customers based in Lagos', rules: { conditions: [{ field: 'city', op: 'eq', value: 'Lagos' }] } },

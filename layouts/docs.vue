@@ -1,6 +1,7 @@
 <template>
   <div class="min-h-screen bg-white dark:bg-[color:var(--surface-app)]">
-    <header class="sticky top-0 z-40 border-b border-ink-100 dark:border-[color:var(--border-subtle)] bg-white/90 dark:bg-[color:var(--surface-card)]/90 backdrop-blur">
+    <NetworkIndicator/>
+    <header class="docs-header sticky top-0 z-40 border-b border-ink-100 dark:border-[color:var(--border-subtle)] backdrop-blur">
       <div class="max-w-[1400px] mx-auto flex items-center gap-4 px-6 h-14">
         <NuxtLink to="/docs" class="flex items-center gap-2">
           <div class="w-7 h-7 rounded-lg bg-brand-500 flex items-center justify-center">
@@ -42,6 +43,16 @@
       </aside>
 
       <article class="min-w-0 prose-docs">
+        <div v-if="sectionHero" class="relative overflow-hidden rounded-xl mb-6 not-prose h-32 md:h-36" :class="sectionHero.gradient">
+          <img :src="sectionHero.image" class="absolute inset-0 w-full h-full object-cover opacity-25" alt=""/>
+          <div class="absolute inset-0 bg-gradient-to-r from-black/25 to-transparent"></div>
+          <div class="relative h-full flex items-center px-6">
+            <div>
+              <div class="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/75">{{ sectionHero.eyebrow }}</div>
+              <div class="mt-1 text-xl md:text-2xl font-bold text-white tracking-tight">{{ sectionHero.title }}</div>
+            </div>
+          </div>
+        </div>
         <slot/>
       </article>
 
@@ -65,6 +76,25 @@
 <script setup lang="ts">
 const search = ref('')
 const theme = useTheme()
+const route = useRoute()
+
+const sectionHeroes: Record<string, { eyebrow: string; title: string; image: string; gradient: string }> = {
+  audience: { eyebrow: 'Audience', title: 'People & profiles', gradient: 'bg-gradient-to-br from-brand-900 to-brand-500', image: 'https://images.pexels.com/photos/3184418/pexels-photo-3184418.jpeg?auto=compress&cs=tinysrgb&w=1600' },
+  engagement: { eyebrow: 'Engagement', title: 'Reach customers across channels', gradient: 'bg-gradient-to-br from-rose-800 to-rose-500', image: 'https://images.pexels.com/photos/3184465/pexels-photo-3184465.jpeg?auto=compress&cs=tinysrgb&w=1600' },
+  analytics: { eyebrow: 'Analytics', title: 'Measure what matters', gradient: 'bg-gradient-to-br from-accent-600 to-accent-500', image: 'https://images.pexels.com/photos/7947541/pexels-photo-7947541.jpeg?auto=compress&cs=tinysrgb&w=1600' },
+  deliverability: { eyebrow: 'Deliverability', title: 'Land in the inbox', gradient: 'bg-gradient-to-br from-emerald-800 to-emerald-500', image: 'https://images.pexels.com/photos/4348401/pexels-photo-4348401.jpeg?auto=compress&cs=tinysrgb&w=1600' },
+  commerce: { eyebrow: 'Commerce', title: 'Connect your store', gradient: 'bg-gradient-to-br from-amber-700 to-amber-500', image: 'https://images.pexels.com/photos/5632402/pexels-photo-5632402.jpeg?auto=compress&cs=tinysrgb&w=1600' },
+  api: { eyebrow: 'Developers', title: 'API reference', gradient: 'bg-gradient-to-br from-ink-900 to-brand-700', image: 'https://images.pexels.com/photos/577585/pexels-photo-577585.jpeg?auto=compress&cs=tinysrgb&w=1600' },
+  sdks: { eyebrow: 'SDKs', title: 'Install & track from any stack', gradient: 'bg-gradient-to-br from-ink-900 to-brand-700', image: 'https://images.pexels.com/photos/1181271/pexels-photo-1181271.jpeg?auto=compress&cs=tinysrgb&w=1600' },
+  trust: { eyebrow: 'Trust & compliance', title: 'Govern your workspace', gradient: 'bg-gradient-to-br from-brand-900 to-brand-500', image: 'https://images.pexels.com/photos/5380664/pexels-photo-5380664.jpeg?auto=compress&cs=tinysrgb&w=1600' },
+  'getting-started': { eyebrow: 'Getting started', title: 'Quickstart', gradient: 'bg-gradient-to-br from-brand-700 to-accent-500', image: 'https://images.pexels.com/photos/3184292/pexels-photo-3184292.jpeg?auto=compress&cs=tinysrgb&w=1600' },
+}
+
+const sectionHero = computed(() => {
+  const parts = route.path.split('/').filter(Boolean)
+  if (parts[0] !== 'docs' || parts.length < 2) return null
+  return sectionHeroes[parts[1]] || null
+})
 
 const groups = [
   {
@@ -152,7 +182,7 @@ const groups = [
     ],
   },
   {
-    title: 'Trust & admin',
+    title: 'Trust & compliance',
     items: [
       { to: '/docs/trust/audit-log', label: 'Audit log' },
       { to: '/docs/trust/roles', label: 'Roles & approvals' },
@@ -171,6 +201,8 @@ const visibleGroups = computed(() => {
 </script>
 
 <style>
+.docs-header { background-color: rgba(255, 255, 255, 0.85); }
+.dark .docs-header { background-color: rgba(10, 22, 32, 0.85); border-bottom-color: var(--border-subtle); }
 .prose-docs h1 { color: var(--text-primary); @apply text-3xl font-bold mt-2 mb-3 leading-tight; }
 .prose-docs h2 { color: var(--text-primary); border-bottom-color: var(--border-subtle); @apply text-xl font-bold mt-10 mb-3 pb-2 border-b leading-tight; }
 .prose-docs h3 { color: var(--text-primary); @apply text-base font-semibold mt-6 mb-2; }

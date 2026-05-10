@@ -16,7 +16,7 @@
 
     <h2>Auto-suspend</h2>
     <p>If the <strong>24-hour complaint rate exceeds 0.3%</strong> or the <strong>bounce rate exceeds 5%</strong> (and at least 100 sends have been made in that window), Pulse flips the workspace's <code>sending_paused</code> flag and halts all outbound mail.</p>
-    <p>The incident is logged in <code>sending_suspensions</code> with the triggering metric, and an admin notification is created. Resume sending from <strong>Settings → Deliverability safeguards</strong> once you've diagnosed the cause.</p>
+    <p>The incident is logged with the triggering metric, and workspace owners and admins are notified. Resume sending from <strong>Settings → Deliverability safeguards</strong> once you've diagnosed the cause.</p>
 
     <h2>Unsubscribe enforcement</h2>
     <ul>

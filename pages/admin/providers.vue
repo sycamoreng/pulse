@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHeader title="Sending providers" subtitle="Connect Amazon SES, Postmark, or Resend per workspace. Tenants never see this.">
+    <PageHeader title="Sending providers" subtitle="Platform SES handles every tenant by default. Only add a row here to override for an enterprise tenant bringing their own provider.">
       <template #actions><button @click="edit(null)" class="btn-primary"><Icon name="plus"/>Add provider</button></template>
     </PageHeader>
 

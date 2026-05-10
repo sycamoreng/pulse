@@ -91,6 +91,33 @@ html, body, #__nuxt {
 .dark .placeholder\:text-ink-300::placeholder { color: var(--text-muted) !important; }
 .dark .placeholder\:text-ink-500::placeholder { color: var(--text-tertiary) !important; }
 
+/* Tinted brand/accent/semantic backgrounds used without dark: variants.
+   Keep them visible against dark surfaces with reduced alpha. */
+.dark .bg-brand-50 { background-color: rgba(48, 135, 185, 0.10) !important; }
+.dark .bg-brand-100 { background-color: rgba(48, 135, 185, 0.15) !important; }
+.dark .bg-brand-100\/60 { background-color: rgba(48, 135, 185, 0.18) !important; }
+.dark .bg-brand-100\/40 { background-color: rgba(48, 135, 185, 0.12) !important; }
+.dark .bg-accent-50 { background-color: rgba(38, 193, 101, 0.10) !important; }
+.dark .bg-accent-100 { background-color: rgba(38, 193, 101, 0.15) !important; }
+.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.12) !important; }
+.dark .bg-red-100 { background-color: rgba(239, 68, 68, 0.18) !important; }
+.dark .border-red-100 { border-color: rgba(239, 68, 68, 0.35) !important; }
+.dark .text-red-600 { color: #FCA5A5 !important; }
+.dark .text-red-700 { color: #FCA5A5 !important; }
+.dark .bg-yellow-50 { background-color: rgba(234, 179, 8, 0.10) !important; }
+.dark .bg-yellow-100 { background-color: rgba(234, 179, 8, 0.18) !important; }
+.dark .text-yellow-700 { color: #FDE68A !important; }
+.dark .bg-amber-500\/15 { background-color: rgba(245, 158, 11, 0.18) !important; }
+.dark .text-amber-600 { color: #FCD34D !important; }
+.dark .text-brand-900 { color: var(--text-primary) !important; }
+.dark .text-brand-700 { color: #7DB8D9 !important; }
+
+/* Hero-style gradients that fade from a tint into white — flip to dark surface. */
+.dark .from-brand-50 { --tw-gradient-from: rgba(48, 135, 185, 0.12) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgba(48, 135, 185, 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+.dark .via-white { --tw-gradient-to: rgba(10, 22, 32, 0) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--surface-app) var(--tw-gradient-via-position), var(--tw-gradient-to) !important; }
+.dark .to-white { --tw-gradient-to: var(--surface-app) var(--tw-gradient-to-position) !important; }
+.dark .from-white { --tw-gradient-from: var(--surface-app) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgba(10, 22, 32, 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+
 /* Preserve solid surfaces on brand/colored backgrounds — those already have white text. */
 .dark .bg-brand-500, .dark .bg-brand-700, .dark .bg-brand-900,
 .dark .bg-red-500, .dark .bg-red-600, .dark .bg-accent-500,
@@ -102,6 +129,10 @@ html, body, #__nuxt {
 .dark .bg-red-600 { background-color: #DC2626 !important; }
 .dark .bg-accent-500 { background-color: #26C165 !important; }
 .dark .bg-ink-900 { background-color: #0B1E27 !important; }
+
+/* Landing header — translucent over app background in both themes. */
+.landing-header { background-color: rgba(255, 255, 255, 0.8); }
+.dark .landing-header { background-color: rgba(10, 22, 32, 0.85); }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
