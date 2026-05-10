@@ -1,0 +1,159 @@
+<template>
+  <div>
+    <PageHeader title="Dashboard" subtitle="Your engagement at a glance." :breadcrumb="auth.workspace?.name"/>
+
+    <div class="p-8 space-y-6">
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div v-for="s in stats" :key="s.label" class="card p-5">
+          <div class="flex items-center justify-between">
+            <div class="text-xs font-semibold text-ink-500 uppercase tracking-wider">{{ s.label }}</div>
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center" :class="s.bg"><Icon :name="s.icon"/></div>
+          </div>
+          <div v-if="loading" class="mt-3"><Skeleton height="2rem" width="60%"/></div>
+          <div v-else class="mt-3 text-3xl font-bold text-ink-900">{{ s.value.toLocaleString() }}</div>
+          <div class="mt-1 text-xs text-ink-500">{{ s.hint }}</div>
+        </div>
+      </div>
+
+      <div class="grid lg:grid-cols-3 gap-6">
+        <div class="card p-6 lg:col-span-2">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <div class="font-semibold text-ink-900">Events over time</div>
+              <div class="text-xs text-ink-500">Last 14 days</div>
+            </div>
+          </div>
+          <div v-if="loading" class="space-y-2 h-56">
+            <div class="flex items-end gap-2 h-48">
+              <Skeleton v-for="i in 14" :key="i" :height="`${30 + (i*7)%60}%`" rounded="rounded-t"/>
+            </div>
+          </div>
+          <div v-else class="h-56 flex flex-col">
+            <div class="flex-1 flex items-end gap-2">
+              <div v-for="(v,i) in chart" :key="i" class="group flex-1 h-full flex flex-col justify-end items-center relative">
+                <div class="absolute -top-8 opacity-0 group-hover:opacity-100 transition bg-ink-900 text-white text-[10px] px-2 py-1 rounded pointer-events-none whitespace-nowrap z-10">
+                  {{ v }} events · {{ dayLabel(i) }}
+                </div>
+                <div class="w-full rounded-t bg-gradient-to-t from-brand-500 to-brand-700 group-hover:from-accent-500 group-hover:to-accent-500 transition-all duration-300"
+                  :style="{ height: `${Math.max(2, (v / maxChart) * 100)}%` }"></div>
+              </div>
+            </div>
+            <div class="flex gap-2 pt-2">
+              <div v-for="(_,i) in chart" :key="i" class="flex-1 text-center text-[10px] text-ink-300">{{ dayTick(i) }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card p-6">
+          <div class="font-semibold text-ink-900 mb-4">Recent activity</div>
+          <div v-if="!recentEvents.length" class="text-sm text-ink-500">No events yet.</div>
+          <div v-else class="space-y-3">
+            <div v-for="e in recentEvents" :key="e.id" class="flex items-start gap-3">
+              <div class="w-8 h-8 rounded-lg bg-brand-100/40 text-brand-500 flex items-center justify-center shrink-0"><Icon name="activity"/></div>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium text-ink-900 truncate">{{ e.name }}</div>
+                <div class="text-xs text-ink-500">{{ timeAgo(e.occurred_at) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid lg:grid-cols-2 gap-6">
+        <div class="card p-6">
+          <div class="flex items-center justify-between mb-4">
+            <div class="font-semibold text-ink-900">Top campaigns</div>
+            <NuxtLink to="/campaigns" class="text-xs text-brand-500 font-semibold">View all →</NuxtLink>
+          </div>
+          <div v-if="!topCampaigns.length" class="text-sm text-ink-500">No campaigns yet.</div>
+          <div v-else class="space-y-2">
+            <div v-for="c in topCampaigns" :key="c.id" class="flex items-center justify-between p-3 rounded-lg hover:bg-ink-50">
+              <div>
+                <div class="font-medium text-ink-900 text-sm">{{ c.name }}</div>
+                <div class="text-xs text-ink-500 capitalize">{{ c.channel }} · {{ c.status }}</div>
+              </div>
+              <div class="text-right">
+                <div class="font-semibold text-ink-900 text-sm">{{ c.sent_count }}</div>
+                <div class="text-[10px] text-ink-500">sent</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card p-6">
+          <div class="flex items-center justify-between mb-4">
+            <div class="font-semibold text-ink-900">Active journeys</div>
+            <NuxtLink to="/journeys" class="text-xs text-brand-500 font-semibold">View all →</NuxtLink>
+          </div>
+          <div v-if="!topJourneys.length" class="text-sm text-ink-500">No journeys yet.</div>
+          <div v-else class="space-y-2">
+            <div v-for="j in topJourneys" :key="j.id" class="flex items-center justify-between p-3 rounded-lg hover:bg-ink-50">
+              <div>
+                <div class="font-medium text-ink-900 text-sm">{{ j.name }}</div>
+                <div class="text-xs text-ink-500">Trigger: {{ j.trigger_event || 'manual' }}</div>
+              </div>
+              <span class="chip" :class="j.status === 'active' ? 'bg-accent-500/10 text-accent-500' : 'bg-ink-100 text-ink-700'">{{ j.status }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+const { auth, supabase, workspaceId } = useWorkspace()
+const stats = ref([
+  { label: 'Customers', value: 0, hint: 'in your database', icon: 'users', bg: 'bg-brand-100/40 text-brand-500' },
+  { label: 'Events (30d)', value: 0, hint: 'total tracked', icon: 'activity', bg: 'bg-accent-500/10 text-accent-500' },
+  { label: 'Segments', value: 0, hint: 'active targeting', icon: 'segment', bg: 'bg-brand-100/40 text-brand-500' },
+  { label: 'Campaigns', value: 0, hint: 'all time', icon: 'send', bg: 'bg-brand-100/40 text-brand-500' },
+])
+const chart = ref<number[]>(Array(14).fill(0))
+const maxChart = computed(() => Math.max(1, ...chart.value))
+const recentEvents = ref<any[]>([])
+const topCampaigns = ref<any[]>([])
+const topJourneys = ref<any[]>([])
+const loading = ref(true)
+const dayLabel = (i: number) => {
+  const d = new Date(Date.now() - (13 - i) * 24 * 3600 * 1000)
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+const dayTick = (i: number) => {
+  if (i % 2 !== 0 && i !== 13) return ''
+  const d = new Date(Date.now() - (13 - i) * 24 * 3600 * 1000)
+  return d.toLocaleDateString('en-US', { day: 'numeric' })
+}
+
+async function load() {
+  if (!workspaceId.value) return
+  loading.value = true
+  const wid = workspaceId.value
+  const [c, e, s, camp, re, tc, tj] = await Promise.all([
+    supabase.from('customers').select('id', { count: 'exact', head: true }).eq('workspace_id', wid),
+    supabase.from('events').select('id', { count: 'exact', head: true }).eq('workspace_id', wid).gte('occurred_at', new Date(Date.now() - 30*24*3600*1000).toISOString()),
+    supabase.from('segments').select('id', { count: 'exact', head: true }).eq('workspace_id', wid),
+    supabase.from('campaigns').select('id', { count: 'exact', head: true }).eq('workspace_id', wid),
+    supabase.from('events').select('*').eq('workspace_id', wid).order('occurred_at', { ascending: false }).limit(6),
+    supabase.from('campaigns').select('*').eq('workspace_id', wid).order('created_at', { ascending: false }).limit(5),
+    supabase.from('journeys').select('*').eq('workspace_id', wid).order('created_at', { ascending: false }).limit(5),
+  ])
+  stats.value[0].value = c.count || 0
+  stats.value[1].value = e.count || 0
+  stats.value[2].value = s.count || 0
+  stats.value[3].value = camp.count || 0
+  recentEvents.value = re.data || []
+  topCampaigns.value = tc.data || []
+  topJourneys.value = tj.data || []
+  const { data: evs } = await supabase.from('events').select('occurred_at').eq('workspace_id', wid).gte('occurred_at', new Date(Date.now() - 14*24*3600*1000).toISOString())
+  const buckets = Array(14).fill(0)
+  ;(evs || []).forEach((x: any) => {
+    const days = Math.floor((Date.now() - new Date(x.occurred_at).getTime()) / (24*3600*1000))
+    if (days >= 0 && days < 14) buckets[13 - days]++
+  })
+  chart.value = buckets
+  loading.value = false
+}
+
+watch(workspaceId, load, { immediate: true })
+</script>
