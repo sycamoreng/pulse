@@ -17,7 +17,8 @@ export default defineNuxtConfig({
     public: {
       supabaseUrl: process.env.VITE_SUPABASE_URL,
       supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY,
-      adminHost: process.env.NUXT_PUBLIC_ADMIN_HOST || ''
+      adminHost: process.env.NUXT_PUBLIC_ADMIN_HOST || '',
+      appUrl: process.env.NUXT_PUBLIC_APP_URL || ''
     }
   }
 })

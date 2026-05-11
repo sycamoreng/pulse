@@ -309,6 +309,12 @@
             <tr v-for="m in members" :key="m.id" class="hover:bg-ink-50">
               <td class="table-td">
                 <div class="font-medium">{{ m.email || m.user_id }}</div>
+                <div v-if="!m.activated_at" class="mt-0.5 inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                  <Icon name="clock" class="w-3 h-3"/>{{ m.user_id ? 'Invited — password not set' : 'Pending registration' }}
+                </div>
+                <div v-else class="mt-0.5 inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                  <Icon name="check" class="w-3 h-3"/>Active
+                </div>
               </td>
               <td class="table-td">
                 <select :value="m.role_id" @change="updateMemberRole(m, ($event.target as HTMLSelectElement).value)" class="input !py-1 !text-xs max-w-[200px]" :disabled="!isOwner">
@@ -316,7 +322,25 @@
                 </select>
               </td>
               <td class="table-td text-right">
-                <button v-if="isOwner" @click="removeMember(m)" class="text-ink-500 hover:text-red-600"><Icon name="trash"/></button>
+                <div class="inline-flex items-center gap-1">
+                  <button
+                    v-if="isOwner && !m.activated_at && m.email"
+                    @click="sendInviteLink(m, 'send')"
+                    :disabled="inviteBusy[m.id] === 'send'"
+                    class="btn-secondary !py-1 !text-xs"
+                    title="Email a registration link to this user">
+                    <Icon name="send" class="w-3 h-3"/>{{ inviteBusy[m.id] === 'send' ? 'Sending…' : 'Send link' }}
+                  </button>
+                  <button
+                    v-if="isOwner && !m.activated_at && m.email"
+                    @click="sendInviteLink(m, 'copy')"
+                    :disabled="inviteBusy[m.id] === 'copy'"
+                    class="btn-secondary !py-1 !text-xs"
+                    title="Copy a registration link to your clipboard">
+                    <Icon name="copy" class="w-3 h-3"/>{{ inviteBusy[m.id] === 'copy' ? 'Working…' : 'Copy link' }}
+                  </button>
+                  <button v-if="isOwner" @click="removeMember(m)" class="text-ink-500 hover:text-red-600"><Icon name="trash"/></button>
+                </div>
               </td>
             </tr>
             <tr v-if="!members.length">
@@ -714,16 +738,31 @@
           <div><label class="label">Role name *</label><input v-model="roleForm.name" class="input" required placeholder="e.g. Brand Reviewer"/></div>
           <div><label class="label">Short description</label><input v-model="roleForm.description" class="input" placeholder="What can they do?"/></div>
         </div>
-        <div>
-          <div class="label mb-2">Permissions</div>
-          <div class="grid sm:grid-cols-2 gap-2">
-            <label v-for="p in permissionCatalog" :key="p.key" class="flex items-start gap-2 p-3 rounded-lg border border-ink-100 hover:border-brand-500 cursor-pointer">
-              <input type="checkbox" v-model="roleForm.flags[p.key]" class="mt-1"/>
-              <div>
-                <div class="text-sm font-medium text-ink-900">{{ p.label }}</div>
-                <div class="text-xs text-ink-500">{{ p.hint }}</div>
-              </div>
-            </label>
+        <div class="space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="label">Permissions</div>
+            <div class="flex items-center gap-2">
+              <button type="button" @click="toggleAllPermissions(true)" class="text-xs font-medium text-brand-600 hover:underline">Select all</button>
+              <span class="text-ink-300">|</span>
+              <button type="button" @click="toggleAllPermissions(false)" class="text-xs font-medium text-ink-500 hover:underline">Clear all</button>
+            </div>
+          </div>
+          <div v-for="g in groupedPermissions" :key="g.group" class="space-y-2">
+            <div class="flex items-center justify-between">
+              <div class="text-xs font-semibold uppercase tracking-wider text-ink-500">{{ g.group }}</div>
+              <button type="button" @click="toggleGroup(g.group, !isGroupAllOn(g.group))" class="text-[11px] font-medium text-brand-600 hover:underline">
+                {{ isGroupAllOn(g.group) ? 'Clear group' : 'Select group' }}
+              </button>
+            </div>
+            <div class="grid sm:grid-cols-2 gap-2">
+              <label v-for="p in g.items" :key="p.key" class="flex items-start gap-2 p-3 rounded-lg border border-ink-100 hover:border-brand-500 cursor-pointer">
+                <input type="checkbox" v-model="roleForm.flags[p.key]" class="mt-1"/>
+                <div>
+                  <div class="text-sm font-medium text-ink-900">{{ p.label }}</div>
+                  <div class="text-xs text-ink-500">{{ p.hint }}</div>
+                </div>
+              </label>
+            </div>
           </div>
         </div>
       </form>
@@ -740,6 +779,15 @@
 const { supabase, auth, workspaceId } = useWorkspace()
 const toast = useToast()
 const confirmDialog = useConfirm()
+
+function appOrigin() {
+  const configured = (useRuntimeConfig().public as any).appUrl as string | undefined
+  if (configured) return configured.replace(/\/+$/, '')
+  return typeof window !== 'undefined' ? window.location.origin : ''
+}
+function isLocalOrigin(u: string) {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|\/|$)/i.test(u)
+}
 
 const tabs = [
   { id: 'workspace', label: 'Workspace', icon: 'settings' },
@@ -1086,6 +1134,7 @@ const newWsName = ref('')
 const inviteOpen = ref(false)
 const invEmail = ref('')
 const invRoleId = ref('')
+const inviteBusy = reactive<Record<string, 'send' | 'copy' | null>>({})
 
 const openDomain = ref(false)
 const domainInput = ref('')
@@ -1096,24 +1145,80 @@ const senderForm = reactive({ domain_id: '', from_name: '', from_email: '', repl
 const roleOpen = ref(false)
 const editingRole = ref<any>(null)
 const permissionCatalog = [
-  { key: 'campaigns_create', label: 'Create campaigns', hint: 'Draft and save campaigns' },
-  { key: 'campaigns_send', label: 'Send campaigns', hint: 'Launch approved campaigns' },
-  { key: 'campaigns_approve', label: 'Approve campaigns', hint: 'Sign off on marketing sends' },
-  { key: 'journeys_create', label: 'Create journeys', hint: 'Build automated journeys' },
-  { key: 'journeys_activate', label: 'Activate journeys', hint: 'Turn journeys on/off' },
-  { key: 'journeys_approve', label: 'Approve journeys', hint: 'Sign off on product journeys' },
-  { key: 'templates_create', label: 'Manage templates', hint: 'Create and edit templates' },
-  { key: 'customers_import', label: 'Import customers', hint: 'Upload CSVs' },
-  { key: 'customers_edit', label: 'Edit customers', hint: 'Update customer records' },
-  { key: 'apps_create', label: 'Manage apps & SDK keys', hint: 'Create/rotate API keys' },
-  { key: 'analytics_view', label: 'View analytics', hint: 'Access funnels, RFM, cohorts' },
-  { key: 'settings_manage', label: 'Manage settings', hint: 'Edit workspace settings' },
+  // Engagement
+  { key: 'campaigns_create', label: 'Create campaigns', hint: 'Draft and save email, SMS & push campaigns', group: 'Engagement' },
+  { key: 'campaigns_send', label: 'Send campaigns', hint: 'Launch approved campaigns to audiences', group: 'Engagement' },
+  { key: 'campaigns_approve', label: 'Approve campaigns', hint: 'Sign off on marketing sends before they go live', group: 'Engagement' },
+  { key: 'journeys_create', label: 'Create journeys', hint: 'Build automated multi-step journeys', group: 'Engagement' },
+  { key: 'journeys_activate', label: 'Activate journeys', hint: 'Turn journeys on/off and manage versions', group: 'Engagement' },
+  { key: 'journeys_approve', label: 'Approve journeys', hint: 'Sign off on product and lifecycle journeys', group: 'Engagement' },
+  { key: 'templates_create', label: 'Manage templates', hint: 'Create and edit reusable message templates', group: 'Engagement' },
+  { key: 'banners_manage', label: 'Manage on-site banners', hint: 'Publish banners, pop-ups & in-app messages', group: 'Engagement' },
+  { key: 'surveys_manage', label: 'Manage surveys', hint: 'Create and launch NPS, CSAT and feedback surveys', group: 'Engagement' },
+
+  // Audience
+  { key: 'customers_import', label: 'Import customers', hint: 'Upload CSVs and bulk enrich audience data', group: 'Audience' },
+  { key: 'customers_edit', label: 'Edit customers', hint: 'Update individual customer records & attributes', group: 'Audience' },
+  { key: 'segments_manage', label: 'Manage segments', hint: 'Create, edit and archive dynamic segments', group: 'Audience' },
+  { key: 'lists_manage', label: 'Manage lists', hint: 'Create static lists and manage memberships', group: 'Audience' },
+  { key: 'blacklist_manage', label: 'Manage suppression & blacklists', hint: 'Add or remove emails and phones from suppression lists', group: 'Audience' },
+  { key: 'attributes_manage', label: 'Manage attributes', hint: 'Define custom customer attributes & schemas', group: 'Audience' },
+
+  // Analytics & AI
+  { key: 'analytics_view', label: 'View analytics', hint: 'Access dashboards, funnels, RFM and cohorts', group: 'Analytics & AI' },
+  { key: 'analytics_export', label: 'Export analytics', hint: 'Download report data and schedule exports', group: 'Analytics & AI' },
+  { key: 'ai_signals_view', label: 'View AI signals', hint: 'See behavioural intelligence detections & anomalies', group: 'Analytics & AI' },
+  { key: 'ai_actions', label: 'Action AI recommendations', hint: 'Generate recommendations and draft AI journeys', group: 'Analytics & AI' },
+
+  // Deliverability & Infrastructure
+  { key: 'domains_manage', label: 'Manage sending domains', hint: 'Add domains and verify SPF, DKIM & DMARC', group: 'Deliverability' },
+  { key: 'providers_manage', label: 'Manage email & SMS providers', hint: 'Connect and rotate ESPs and SMS gateways', group: 'Deliverability' },
+  { key: 'inbox_placement', label: 'Run inbox placement tests', hint: 'Trigger seed-list tests and view placement reports', group: 'Deliverability' },
+
+  // Developer & Integrations
+  { key: 'apps_create', label: 'Manage apps & SDK keys', hint: 'Create and rotate SDK + publishable API keys', group: 'Developer' },
+  { key: 'integrations_manage', label: 'Manage integrations', hint: 'Connect Slack, Mixpanel, Adjust, Metabase, S3 and more', group: 'Developer' },
+  { key: 'webhooks_manage', label: 'Manage webhooks', hint: 'Configure outgoing webhooks and retries', group: 'Developer' },
+  { key: 'commerce_manage', label: 'Manage commerce integrations', hint: 'Connect Shopify, WooCommerce and attribution', group: 'Developer' },
+
+  // Trust & Governance
+  { key: 'audit_view', label: 'View audit log', hint: 'Read the workspace activity audit trail', group: 'Trust & Governance' },
+  { key: 'retention_manage', label: 'Manage data retention', hint: 'Set retention windows and run purges', group: 'Trust & Governance' },
+  { key: 'scim_manage', label: 'Manage SCIM & provisioning', hint: 'Issue SCIM tokens and manage IdP sync', group: 'Trust & Governance' },
+  { key: 'approvals_bypass', label: 'Bypass approvals', hint: 'Skip mandatory approvals (use with care)', group: 'Trust & Governance' },
+
+  // Workspace administration
+  { key: 'team_manage', label: 'Manage team', hint: 'Invite, remove and reassign teammates', group: 'Administration' },
+  { key: 'roles_manage', label: 'Manage roles & permissions', hint: 'Create, edit and assign custom roles', group: 'Administration' },
+  { key: 'billing_manage', label: 'Manage billing & plan', hint: 'Change plan, payment method and invoices', group: 'Administration' },
+  { key: 'settings_manage', label: 'Manage settings', hint: 'Edit workspace name, branding and policies', group: 'Administration' },
 ]
+
+const groupedPermissions = computed(() => {
+  const order = ['Engagement', 'Audience', 'Analytics & AI', 'Deliverability', 'Developer', 'Trust & Governance', 'Administration']
+  const map: Record<string, typeof permissionCatalog> = {}
+  for (const p of permissionCatalog) {
+    const g = (p as any).group || 'Other'
+    if (!map[g]) map[g] = [] as any
+    ;(map[g] as any).push(p)
+  }
+  return order.filter(g => map[g]?.length).map(g => ({ group: g, items: map[g] }))
+})
 const roleForm = reactive<{ name: string; description: string; flags: Record<string, boolean> }>({
   name: '', description: '', flags: {},
 })
 
 const isOwner = computed(() => auth.workspace?.owner_id === auth.user?.id)
+
+function toggleAllPermissions(on: boolean) {
+  for (const p of permissionCatalog) roleForm.flags[p.key] = on
+}
+function toggleGroup(group: string, on: boolean) {
+  for (const p of permissionCatalog) if ((p as any).group === group) roleForm.flags[p.key] = on
+}
+function isGroupAllOn(group: string) {
+  return permissionCatalog.filter(p => (p as any).group === group).every(p => !!roleForm.flags[p.key])
+}
 
 function hydrateForm() {
   const w = auth.workspace
@@ -1264,12 +1369,53 @@ async function invite() {
     kind: 'invite',
     title: `You've been added to ${auth.workspace?.name}`,
     body: `${auth.user?.email} invited you to collaborate on ${auth.workspace?.name}. Sign in to access the workspace.`,
-    link: `${window.location.origin}/login`,
+    link: `${appOrigin()}/login`,
     send_email: true,
   })
   audit.log('invite', 'member', null, email, { role_id: invRoleId.value })
   toast.success('Invite sent', `${email} will be notified by email and in-app.`)
   await loadAll()
+}
+
+async function sendInviteLink(m: any, mode: 'send' | 'copy') {
+  if (!workspaceId.value || !m.email) return
+  const origin = appOrigin()
+  if (isLocalOrigin(origin)) {
+    toast.error('Set your public app URL', 'Registration links would point to localhost. Add NUXT_PUBLIC_APP_URL to your environment (e.g. https://app.yourdomain.com) and redeploy.')
+    return
+  }
+  inviteBusy[m.id] = mode
+  try {
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-invite-link`
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({
+        workspace_id: workspaceId.value,
+        email: m.email,
+        mode,
+        redirect_to: `${appOrigin()}/welcome`,
+      }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || !json.ok) throw new Error(json.error || `HTTP ${res.status}`)
+    if (mode === 'copy') {
+      try { await navigator.clipboard.writeText(json.link) } catch {}
+      toast.success('Registration link copied', 'Paste it to the user through your preferred channel.')
+    } else {
+      toast.success('Registration link sent', `${m.email} will receive an email with the sign-up link.`)
+    }
+    audit.log('invite_link', 'member', m.id, m.email, { mode })
+  } catch (e: any) {
+    toast.error('Could not generate link', e.message || 'Try again.')
+  } finally {
+    inviteBusy[m.id] = null
+  }
 }
 
 async function updateMemberRole(m: any, roleId: string) {

@@ -3,7 +3,7 @@ import { useAuthStore } from '~/stores/auth'
 export default defineNuxtRouteMiddleware(async (to) => {
   if (import.meta.server) return
 
-  const tenantPublic = ['/login', '/signup', '/']
+  const tenantPublic = ['/login', '/signup', '/', '/welcome']
   if (to.path === '/docs' || to.path.startsWith('/docs/')) return
   if (to.path.startsWith('/s/')) return
   if (to.path.startsWith('/share/')) return
