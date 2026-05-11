@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Pulse mark">
+  <title>Pulse</title>
+  <g transform="translate(48,64)">
+    <path d="M -36 -26 Q -14 -26 0 0" fill="none" stroke="#06B6D4" stroke-width="4" stroke-linecap="round" opacity="0.5"/>
+    <path d="M -36 0 L 0 0" fill="none" stroke="#06B6D4" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+    <path d="M -36 26 Q -14 26 0 0" fill="none" stroke="#06B6D4" stroke-width="4" stroke-linecap="round" opacity="0.5"/>
+    <circle cx="0" cy="0" r="9" fill="#06B6D4"/>
+    <circle cx="0" cy="0" r="18" fill="none" stroke="#06B6D4" stroke-width="2" opacity="0.45"/>
+    <circle cx="0" cy="0" r="28" fill="none" stroke="#06B6D4" stroke-width="1.5" opacity="0.22"/>
+  </g>
+</svg>

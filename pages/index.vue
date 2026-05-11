@@ -3,9 +3,7 @@
     <header class="landing-header sticky top-0 z-40 backdrop-blur-lg border-b border-ink-100/60 dark:border-[color:var(--border-subtle)]">
       <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <div class="w-9 h-9 rounded-lg bg-brand-500 flex items-center justify-center shadow-sm shadow-brand-500/30">
-            <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 12h3l2-8 4 16 3-10 2 5h6"/></svg>
-          </div>
+          <img src="/pulse-app-icon.svg" alt="Pulse" class="w-9 h-9 rounded-lg"/>
           <span class="font-bold text-lg text-brand-900 dark:text-white">Pulse</span>
         </div>
         <nav class="hidden md:flex items-center gap-8 text-sm text-ink-700 dark:text-[color:var(--text-secondary)]">
@@ -207,9 +205,7 @@
     <footer class="border-t border-ink-100 py-10">
       <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-ink-500">
         <div class="flex items-center gap-2">
-          <div class="w-7 h-7 rounded-md bg-brand-500 flex items-center justify-center">
-            <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 12h3l2-8 4 16 3-10 2 5h6"/></svg>
-          </div>
+          <img src="/pulse-app-icon.svg" alt="Pulse" class="w-7 h-7 rounded-md"/>
           <span class="font-bold text-brand-900">Pulse</span>
           <span class="ml-2">© 2026. Built for modern product teams.</span>
         </div>

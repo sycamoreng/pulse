@@ -13,6 +13,12 @@ export const useAudit = () => {
   ) {
     const wid = auth.workspace?.id
     if (!wid) return
+    let user_agent = ''
+    let request_id = ''
+    if (typeof window !== 'undefined') {
+      user_agent = navigator.userAgent || ''
+      request_id = (crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`)
+    }
     await $supabase.from('audit_logs').insert({
       workspace_id: wid,
       actor_id: auth.user?.id || null,
@@ -22,6 +28,8 @@ export const useAudit = () => {
       entity_id: entity_id ? String(entity_id) : null,
       entity_name,
       diff,
+      user_agent,
+      request_id,
     })
   }
 

@@ -4,9 +4,7 @@
     <aside class="fixed top-0 left-0 bottom-0 w-64 bg-white dark:bg-[color:var(--surface-card)] border-r border-ink-100 dark:border-[color:var(--border-subtle)] flex flex-col z-40">
       <div class="px-4 py-4 border-b border-ink-100 dark:border-[color:var(--border-subtle)] shrink-0">
         <div class="flex items-center gap-2 mb-3">
-          <div class="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center">
-            <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 12h3l2-8 4 16 3-10 2 5h6"/></svg>
-          </div>
+          <img :src="pulseIcon" alt="Pulse" class="w-8 h-8 rounded-lg"/>
           <div>
             <div class="font-bold text-ink-900 leading-tight">Pulse</div>
             <div class="text-[10px] text-ink-500 uppercase tracking-wider">Engagement Cloud</div>
@@ -64,7 +62,7 @@
         <NuxtLink v-if="auth.workspace?.commerce_enabled" to="/products" class="nav-link" active-class="nav-link-active"><Icon name="box"/>Products</NuxtLink>
 
         <div class="px-3 pt-4 pb-1 text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Intelligence</div>
-        <NuxtLink to="/intelligence" class="nav-link" active-class="nav-link-active"><Icon name="flask"/>Signals &amp; AI</NuxtLink>
+        <NuxtLink to="/intelligence" class="nav-link" active-class="nav-link-active"><Icon name="flask" class="text-ai-500"/>Signals &amp; AI<span class="ml-auto text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-ai-50 text-ai-700">AI</span></NuxtLink>
 
         <div class="px-3 pt-4 pb-1 text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Engagement</div>
         <NuxtLink to="/campaigns" class="nav-link" active-class="nav-link-active"><Icon name="send"/>Campaigns</NuxtLink>
@@ -143,6 +141,7 @@
 
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
+import pulseIcon from '~/assets/pulse-app-icon.svg'
 const auth = useAuthStore()
 const role = useRole()
 const theme = useTheme()

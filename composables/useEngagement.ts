@@ -145,11 +145,34 @@ export const useEngagement = () => {
     const holdoutPct = Math.max(0, Math.min(50, Number(campaign.holdout_percent) || 0))
     const shuffled = ids.slice().sort(() => Math.random() - 0.5)
     const holdoutCount = Math.floor(shuffled.length * (holdoutPct / 100))
-    const recipients = shuffled.slice(holdoutCount)
+    let recipients = shuffled.slice(holdoutCount)
     const heldOut = shuffled.slice(0, holdoutCount)
+
+    // Persist the holdout set so we can measure lift later.
+    if (heldOut.length) {
+      const rows = heldOut.map((cid: string) => ({ workspace_id: campaign.workspace_id, campaign_id: campaign.id, customer_id: cid }))
+      await $supabase.from('campaign_holdouts').upsert(rows, { onConflict: 'campaign_id,customer_id', ignoreDuplicates: true })
+    }
 
     // Policy lookup for quiet-hours enforcement
     const policy = await loadChannelPolicy(campaign.workspace_id, campaign.channel)
+
+    // Cross-channel frequency capping at enqueue. Skip for transactional overrides.
+    const dayCap = Number(policy?.max_per_day) || 0
+    const weekCap = Number(policy?.max_per_week) || 0
+    if ((dayCap > 0 || weekCap > 0) && recipients.length) {
+      const [{ data: d24 }, { data: d7 }] = await Promise.all([
+        dayCap > 0 ? $supabase.rpc('customer_send_counts', { p_workspace_id: campaign.workspace_id, p_customer_ids: recipients, p_hours: 24 }) : Promise.resolve({ data: [] }),
+        weekCap > 0 ? $supabase.rpc('customer_send_counts', { p_workspace_id: campaign.workspace_id, p_customer_ids: recipients, p_hours: 168 }) : Promise.resolve({ data: [] }),
+      ])
+      const daily = new Map<string, number>((d24 || []).map((r: any) => [r.customer_id, Number(r.sends) || 0]))
+      const weekly = new Map<string, number>((d7 || []).map((r: any) => [r.customer_id, Number(r.sends) || 0]))
+      recipients = recipients.filter((cid: string) => {
+        if (dayCap > 0 && (daily.get(cid) || 0) >= dayCap) return false
+        if (weekCap > 0 && (weekly.get(cid) || 0) >= weekCap) return false
+        return true
+      })
+    }
     const mode: string = campaign.send_time_mode || 'immediate'
     const respectTz = mode === 'timezone' || !!policy?.respect_time_zone
     const effectiveMode = mode === 'immediate' && policy?.send_time_optimization ? 'optimized' : mode
@@ -278,13 +301,21 @@ export const useEngagement = () => {
     ]
     if (events.length) await $supabase.from('events').insert(events)
 
+    const capped = shuffled.length - holdoutCount - recipients.length
     return {
       sent: immediateIds.length,
       scheduled: scheduledCount,
       held_out: heldOut.length,
+      capped,
       opened: openCount,
       clicked: clickCount,
     }
+  }
+
+  async function computeCampaignLift(campaignId: string) {
+    const { data, error } = await $supabase.rpc('compute_campaign_lift', { p_campaign_id: campaignId })
+    if (error) throw error
+    return data
   }
 
   async function enrollJourney(journey: any, customerIds: string[]) {
@@ -305,5 +336,5 @@ export const useEngagement = () => {
     return { enrolled: data?.length || 0, completed, held_out: holdoutCount }
   }
 
-  return { resolveAudience, sendCampaign, enrollJourney, computeSendTimes }
+  return { resolveAudience, sendCampaign, enrollJourney, computeSendTimes, computeCampaignLift }
 }

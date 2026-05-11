@@ -247,6 +247,63 @@
               </div>
             </template>
 
+            <template v-else-if="selectedNode.kind === 'update_attribute'">
+              <div><label class="label">Attribute key</label>
+                <input v-model="selectedNode.data.attr_key" class="input" placeholder="e.g. lifecycle_stage"/>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div><label class="label">Operation</label>
+                  <select v-model="selectedNode.data.op" class="input">
+                    <option value="set">Set</option>
+                    <option value="increment">Increment (number)</option>
+                    <option value="append">Append to list</option>
+                  </select>
+                </div>
+                <div><label class="label">Value</label>
+                  <input v-model="selectedNode.data.value" class="input" placeholder="engaged / 1 / vip"/>
+                </div>
+              </div>
+              <div class="text-xs text-ink-500">Writes into <code class="bg-ink-50 px-1 rounded">customers.attributes</code> when this step runs.</div>
+            </template>
+
+            <template v-else-if="selectedNode.kind === 'wait_until_event'">
+              <div><label class="label">Event</label>
+                <select v-model="selectedNode.data.event" class="input">
+                  <option value="">— choose —</option>
+                  <option v-for="d in eventDefs" :key="d.id" :value="d.name">{{ d.name }}</option>
+                </select>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div><label class="label">Max wait</label><input v-model.number="selectedNode.data.max_value" type="number" min="1" class="input"/></div>
+                <div><label class="label">Unit</label>
+                  <select v-model="selectedNode.data.max_unit" class="input">
+                    <option>minutes</option><option>hours</option><option>days</option>
+                  </select>
+                </div>
+              </div>
+              <div class="text-xs text-ink-500">Pauses each customer until the event fires or the window elapses.</div>
+            </template>
+
+            <template v-else-if="selectedNode.kind === 'condition'">
+              <div><label class="label">Field</label>
+                <input v-model="selectedNode.data.field" class="input" placeholder="country, attributes.plan, device"/>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div><label class="label">Operator</label>
+                  <select v-model="selectedNode.data.op" class="input">
+                    <option value="eq">equals</option>
+                    <option value="neq">not equal</option>
+                    <option value="gt">greater than</option>
+                    <option value="lt">less than</option>
+                    <option value="contains">contains</option>
+                    <option value="exists">exists</option>
+                  </select>
+                </div>
+                <div><label class="label">Value</label><input v-model="selectedNode.data.value" class="input"/></div>
+              </div>
+              <div class="text-xs text-ink-500">Branches to "yes" or "no" edge based on this check at runtime.</div>
+            </template>
+
             <template v-else-if="selectedNode.kind === 'ab_split'">
               <div><label class="label">Variant A %</label>
                 <input v-model.number="selectedNode.data.split_a" type="number" min="0" max="100" class="input"/>
@@ -413,9 +470,14 @@ const blockGroups = reactive([
   { label: 'Conditions', type: 'condition', open: true, blocks: [
     { kind: 'attribute', label: 'Attribute check', icon: 'filter' },
     { kind: 'event_done', label: 'Did event?', icon: 'activity' },
+    { kind: 'condition', label: 'If/else branch', icon: 'layers' },
+  ]},
+  { label: 'Data', type: 'action', open: true, blocks: [
+    { kind: 'update_attribute', label: 'Update attribute', icon: 'edit' },
   ]},
   { label: 'Flow control', type: 'flow', open: true, blocks: [
     { kind: 'wait', label: 'Wait', icon: 'clock' },
+    { kind: 'wait_until_event', label: 'Wait until event', icon: 'clock' },
     { kind: 'ab_split', label: 'A/B split', icon: 'layers' },
     { kind: 'exit', label: 'Exit', icon: 'check' },
   ]},
@@ -430,8 +492,9 @@ function nodeTitle(n: any) {
   const titles: Record<string, string> = {
     activity: 'Activity trigger', segment: 'Segment trigger', list: 'List trigger',
     email: 'Send email', push: 'Send push', sms: 'Send SMS', whatsapp: 'WhatsApp',
-    wait: 'Wait', ab_split: 'A/B split', exit: 'Exit',
-    attribute: 'Attribute check', event_done: 'Event check',
+    wait: 'Wait', wait_until_event: 'Wait until event', ab_split: 'A/B split', exit: 'Exit',
+    attribute: 'Attribute check', event_done: 'Event check', condition: 'If/else branch',
+    update_attribute: 'Update attribute',
   }
   return titles[n.kind] || n.kind
 }
@@ -443,6 +506,9 @@ function nodeSubtitle(n: any) {
   if (n.kind === 'ab_split') return `${n.data.split_a || 50}% / ${100 - (n.data.split_a || 50)}%`
   if (n.kind === 'attribute') return `${n.data.field || 'field'} ${n.data.op || 'eq'} ${n.data.value || '—'}`
   if (n.kind === 'event_done') return n.data.event || 'pick event'
+  if (n.kind === 'condition') return `${n.data.field || 'field'} ${n.data.op || 'eq'} ${n.data.value || '—'}`
+  if (n.kind === 'update_attribute') return `${n.data.op || 'set'} ${n.data.attr_key || 'attr'} = ${n.data.value || ''}`
+  if (n.kind === 'wait_until_event') return `until ${n.data.event || 'event'} (max ${n.data.max_value || 1}${(n.data.max_unit || 'h')[0]})`
   if (n.kind === 'segment') return segments.value.find((s: any) => s.id === n.data.segment_id)?.name || 'pick segment'
   if (n.kind === 'list') return lists.value.find((l: any) => l.id === n.data.list_id)?.name || 'pick list'
   return 'exit'
@@ -451,8 +517,8 @@ function nodeIcon(n: any) {
   const m: Record<string, string> = {
     activity: 'activity', segment: 'segment', list: 'list',
     email: 'mail', push: 'bell', sms: 'smartphone', whatsapp: 'smartphone',
-    wait: 'clock', ab_split: 'layers', exit: 'check',
-    attribute: 'filter', event_done: 'activity',
+    wait: 'clock', wait_until_event: 'clock', ab_split: 'layers', exit: 'check',
+    attribute: 'filter', event_done: 'activity', condition: 'layers', update_attribute: 'edit',
   }
   return m[n.kind] || 'box'
 }

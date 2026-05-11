@@ -28,7 +28,7 @@ watch(() => [props.workspace?.logo_url, props.logoUrl], () => { failed.value = f
 const resolvedName = computed(() => props.name || props.workspace?.name || 'P')
 const initial = computed(() => (resolvedName.value || 'P')[0].toUpperCase())
 const logoUrl = computed(() => props.logoUrl ?? props.workspace?.logo_url ?? '')
-const background = computed(() => props.color || props.workspace?.brand_primary || '#3087B9')
+const background = computed(() => props.color || props.workspace?.brand_primary || '#06B6D4')
 
 const sizeClasses = computed(() => ({
   xs: 'w-6 h-6 text-[10px]',

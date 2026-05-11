@@ -6,7 +6,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const tenantPublic = ['/login', '/signup', '/']
   if (to.path === '/docs' || to.path.startsWith('/docs/')) return
   if (to.path.startsWith('/s/')) return
-  if (to.path.startsWith('/s/')) return
+  if (to.path.startsWith('/share/')) return
   const adminPublic = ['/admin/login']
   const auth = useAuthStore()
   await auth.init()

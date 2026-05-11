@@ -5,9 +5,7 @@
 
     <div class="relative w-full max-w-md">
       <div class="flex items-center gap-2 mb-10 justify-center">
-        <div class="w-10 h-10 rounded-lg bg-brand-500 flex items-center justify-center">
-          <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 12h3l2-8 4 16 3-10 2 5h6"/></svg>
-        </div>
+        <img src="/pulse-app-icon.svg" alt="Pulse" class="w-10 h-10 rounded-lg"/>
         <div>
           <div class="font-bold text-lg leading-tight">Pulse</div>
           <div class="text-[10px] text-white/50 uppercase tracking-wider">Platform console</div>

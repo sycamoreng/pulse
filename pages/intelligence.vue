@@ -5,8 +5,17 @@
         <button @click="runDetect" :disabled="busy.detect" class="btn-secondary">
           <Icon name="refresh" class="w-4 h-4" :class="busy.detect ? 'animate-spin' : ''"/>{{ busy.detect ? 'Scanning…' : 'Rescan signals' }}
         </button>
-        <button @click="runRecommend" :disabled="busy.reco || !openSignals.length" class="btn-primary">
+        <button @click="runRecommend" :disabled="busy.reco || !openSignals.length" class="btn-ai">
           <Icon name="send" class="w-4 h-4"/>{{ busy.reco ? 'Thinking…' : 'Generate AI recommendations' }}
+        </button>
+        <button @click="runAnomalies" :disabled="busy.anomalies" class="btn-secondary">
+          <Icon name="trending" class="w-4 h-4"/>{{ busy.anomalies ? 'Scanning…' : 'Detect anomalies' }}
+        </button>
+        <button @click="runSegmentSuggest" :disabled="busy.segSuggest" class="btn-secondary">
+          <Icon name="layers" class="w-4 h-4"/>{{ busy.segSuggest ? 'Thinking…' : 'Suggest segments' }}
+        </button>
+        <button @click="openJourneyModal = true" class="btn-ai">
+          <Icon name="flask" class="w-4 h-4"/>Draft journey
         </button>
       </template>
     </PageHeader>
@@ -26,8 +35,8 @@
           <div class="mt-2 text-3xl font-bold text-ink-900">{{ stats.customers }}</div>
           <div class="text-xs text-ink-500">Unique people with at least one open signal.</div>
         </div>
-        <div class="card p-5">
-          <div class="text-xs font-semibold text-ink-500 uppercase tracking-wider">AI recommendations</div>
+        <div class="card p-5 border-ai-500/20 ring-1 ring-ai-500/10">
+          <div class="flex items-center gap-1.5 text-xs font-semibold text-ai-700 uppercase tracking-wider"><Icon name="flask" class="w-3 h-3"/>AI recommendations</div>
           <div class="mt-2 text-3xl font-bold text-ink-900">{{ stats.recos }}</div>
           <div class="text-xs text-ink-500">Ready to review or drop into a campaign.</div>
         </div>
@@ -127,17 +136,95 @@
         <Pagination v-model:page="signalsPage" v-model:pageSize="signalsPageSize" :total="filteredSignals.length"/>
       </div>
 
-      <div class="card p-6">
+      <div v-if="anomalies.length" class="card p-6">
         <div class="flex items-center justify-between mb-4">
           <div>
-            <div class="font-semibold text-ink-900">AI recommendations</div>
-            <div class="text-xs text-ink-500">Context-aware next-best messages per customer.</div>
+            <div class="font-semibold text-ink-900 flex items-center gap-2"><Icon name="trending" class="w-4 h-4 text-ai-600"/>Anomalies</div>
+            <div class="text-xs text-ink-500">Sudden shifts compared to the prior 7-day baseline.</div>
+          </div>
+        </div>
+        <div class="divide-y divide-ink-100">
+          <div v-for="a in anomalies" :key="a.id" class="py-3 flex items-start gap-3">
+            <span class="chip text-[10px] capitalize" :class="severityChip(a.severity)">{{ a.severity }}</span>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-ink-900 truncate">{{ a.metric }}<span v-if="a.dimension" class="text-ink-500"> · {{ a.dimension }}</span></div>
+              <div class="text-xs text-ink-600">{{ a.summary }}</div>
+              <div class="text-[11px] text-ink-400 mt-0.5">{{ timeAgo(a.detected_at) }} · baseline {{ a.baseline }} &rarr; now {{ a.current }} ({{ a.delta_pct }}%)</div>
+            </div>
+            <button class="btn-ghost text-[11px] text-ink-500" @click="resolveAnomaly(a)">Dismiss</button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="segSuggestions.length" class="card p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2">
+            <span class="chip-ai text-[10px]"><Icon name="flask" class="w-3 h-3"/>AI</span>
+            <div>
+              <div class="font-semibold text-ink-900">Segment suggestions</div>
+              <div class="text-xs text-ink-500">High-value audiences Claude thinks are worth a campaign.</div>
+            </div>
+          </div>
+        </div>
+        <div class="grid md:grid-cols-2 gap-4">
+          <div v-for="s in segSuggestions" :key="s.id" class="border border-ink-100 rounded-xl p-4">
+            <div class="font-semibold text-ink-900">{{ s.name }}</div>
+            <div class="text-xs text-ink-600 mt-1">{{ s.description }}</div>
+            <div v-if="s.rationale" class="text-[11px] text-ink-500 italic mt-2">&ldquo;{{ s.rationale }}&rdquo;</div>
+            <div class="mt-3 flex items-center gap-2">
+              <button class="btn-ai text-xs" :disabled="busy.promote === s.id" @click="promoteSegment(s)">
+                <Icon name="check" class="w-3 h-3"/>{{ busy.promote === s.id ? 'Creating&hellip;' : 'Create segment' }}
+              </button>
+              <button class="btn-ghost text-xs text-ink-500" @click="dismissSegSuggestion(s)">Dismiss</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="journeyDrafts.length" class="card p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2">
+            <span class="chip-ai text-[10px]"><Icon name="flask" class="w-3 h-3"/>AI</span>
+            <div>
+              <div class="font-semibold text-ink-900">Journey drafts</div>
+              <div class="text-xs text-ink-500">Claude-drafted canvases &mdash; promote to a real journey to edit and launch.</div>
+            </div>
+          </div>
+        </div>
+        <div class="space-y-3">
+          <div v-for="d in journeyDrafts" :key="d.id" class="border border-ink-100 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex-1 min-w-0">
+                <div class="font-semibold text-ink-900">{{ d.name }}</div>
+                <div class="text-xs text-ink-600 mt-1">{{ d.description }}</div>
+                <div class="text-[11px] text-ink-500 mt-1">Trigger: <span class="font-mono">{{ d.trigger_event }}</span> &middot; {{ (d.nodes || []).length }} steps</div>
+                <div v-if="d.rationale" class="text-[11px] text-ink-500 italic mt-2">&ldquo;{{ d.rationale }}&rdquo;</div>
+              </div>
+              <div class="flex items-center gap-1 shrink-0">
+                <button class="btn-ai text-xs" :disabled="busy.promoteJ === d.id" @click="promoteJourney(d)">
+                  <Icon name="check" class="w-3 h-3"/>{{ busy.promoteJ === d.id ? 'Creating&hellip;' : 'Create journey' }}
+                </button>
+                <button class="btn-ghost text-xs text-ink-500" @click="dismissDraft(d)">Dismiss</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2">
+            <span class="chip-ai text-[10px]"><Icon name="flask" class="w-3 h-3"/>AI</span>
+            <div>
+              <div class="font-semibold text-ink-900">AI recommendations</div>
+              <div class="text-xs text-ink-500">Context-aware next-best messages per customer.</div>
+            </div>
           </div>
           <div class="text-[11px] text-ink-500" v-if="lastModel">Last run model: <span class="font-mono">{{ lastModel }}</span></div>
         </div>
-        <div v-if="bulkGroups.length" class="mb-4 rounded-xl border border-brand-500/20 bg-brand-500/5 p-4">
+        <div v-if="bulkGroups.length" class="mb-4 rounded-xl border border-ai-500/25 bg-ai-50 p-4">
           <div class="flex items-center gap-2 mb-2">
-            <Icon name="flask" class="w-4 h-4 text-brand-500"/>
+            <span class="chip-ai text-[10px]"><Icon name="flask" class="w-3 h-3"/>AI</span>
             <div class="font-semibold text-ink-900 text-sm">Group similar recommendations</div>
           </div>
           <div class="text-xs text-ink-600 mb-3">Ship one campaign to everyone flagged by the same signal — faster than drafting one at a time.</div>
@@ -147,7 +234,7 @@
                 <div class="text-sm font-medium text-ink-900 truncate">{{ g.label }}</div>
                 <div class="text-[11px] text-ink-500">{{ g.count }} customers · channel {{ g.channel }} · {{ g.sampleHeadline }}</div>
               </div>
-              <button class="btn-primary text-xs" :disabled="busy.bulk === g.key" @click="draftBulkCampaign(g)">
+              <button class="btn-ai text-xs" :disabled="busy.bulk === g.key" @click="draftBulkCampaign(g)">
                 <Icon name="send" class="w-3 h-3"/>{{ busy.bulk === g.key ? 'Drafting…' : 'Draft bulk campaign' }}
               </button>
             </div>
@@ -160,8 +247,8 @@
           <div v-for="r in recos" :key="r.id" class="border border-ink-100 rounded-xl p-4 hover:shadow-sm transition">
             <div class="flex items-start justify-between gap-2 mb-2">
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="chip text-[10px] bg-brand-500/10 text-brand-500 capitalize">{{ r.channel }}</span>
-                <span class="chip text-[10px] bg-accent-500/10 text-accent-500 capitalize">{{ r.kind }}</span>
+                <span class="chip text-[10px] bg-ai-50 text-ai-700 capitalize"><Icon name="flask" class="w-3 h-3"/>{{ r.channel }}</span>
+                <span class="chip text-[10px] bg-accent-500/10 text-accent-700 capitalize">{{ r.kind }}</span>
                 <span v-if="r.signal_key" class="chip text-[10px] bg-ink-100 text-ink-700">{{ r.signal_key }}</span>
               </div>
               <div class="text-[10px] text-ink-400">{{ Math.round(Number(r.confidence)*100) }}%</div>
@@ -208,6 +295,26 @@
         </div>
       </div>
     </div>
+
+    <Modal v-model="openJourneyModal" title="Draft a journey with AI">
+      <form id="jdf" @submit.prevent="submitJourneyDraft" class="space-y-3">
+        <div>
+          <label class="label">Goal</label>
+          <input v-model="journeyForm.goal" class="input" required placeholder="Activate new signups within 7 days"/>
+        </div>
+        <div>
+          <label class="label">Trigger event (optional)</label>
+          <input v-model="journeyForm.trigger_event" class="input font-mono" placeholder="user_signed_up"/>
+          <div class="text-[11px] text-ink-500 mt-1">Leave blank to let Claude pick based on your event library.</div>
+        </div>
+      </form>
+      <template #footer>
+        <button @click="openJourneyModal = false" class="btn-secondary">Cancel</button>
+        <button form="jdf" type="submit" class="btn-ai" :disabled="busy.draftJ">
+          <Icon name="flask" class="w-3 h-3"/>{{ busy.draftJ ? 'Drafting&hellip;' : 'Draft journey' }}
+        </button>
+      </template>
+    </Modal>
   </div>
 </template>
 
@@ -234,13 +341,151 @@ const customers = ref<Record<string, any>>({})
 const filterKey = ref('')
 const lastModel = ref('')
 
-const busy = reactive<{ detect: boolean; reco: boolean; one: string | null; draft: string | null; bulk: string | null }>({
-  detect: false,
-  reco: false,
-  one: null,
-  draft: null,
-  bulk: null,
+const busy = reactive<{
+  detect: boolean; reco: boolean; one: string | null; draft: string | null; bulk: string | null;
+  anomalies: boolean; segSuggest: boolean; draftJ: boolean;
+  promote: string | null; promoteJ: string | null;
+}>({
+  detect: false, reco: false, one: null, draft: null, bulk: null,
+  anomalies: false, segSuggest: false, draftJ: false,
+  promote: null, promoteJ: null,
 })
+const anomalies = ref<any[]>([])
+const segSuggestions = ref<any[]>([])
+const journeyDrafts = ref<any[]>([])
+const openJourneyModal = ref(false)
+const journeyForm = reactive({ goal: '', trigger_event: '' })
+
+function severityChip(sev: string) {
+  switch (sev) {
+    case 'critical': return 'bg-red-100 text-red-700'
+    case 'warning': return 'bg-amber-100 text-amber-700'
+    default: return 'bg-ink-100 text-ink-700'
+  }
+}
+
+async function callEdge(fn: string, body: any) {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${fn}`
+  const { data: { session } } = await supabase.auth.getSession()
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify(body),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok || !json.ok) throw new Error(json.error || `HTTP ${res.status}`)
+  return json
+}
+
+async function runAnomalies() {
+  if (!workspaceId.value) return
+  busy.anomalies = true
+  try {
+    const j = await callEdge('ai-anomalies', { workspace_id: workspaceId.value })
+    toast.success('Anomaly scan complete', `${j.created} new, ${j.deduped} already open.`)
+    await loadAiStudio()
+  } catch (e: any) { toast.error('Scan failed', e.message) }
+  finally { busy.anomalies = false }
+}
+
+async function runSegmentSuggest() {
+  if (!workspaceId.value) return
+  busy.segSuggest = true
+  try {
+    const j = await callEdge('ai-segment-suggest', { workspace_id: workspaceId.value })
+    toast.success('Segments suggested', `${j.created} ideas drafted by ${j.used_model}.`)
+    await loadAiStudio()
+  } catch (e: any) { toast.error('Could not suggest', e.message) }
+  finally { busy.segSuggest = false }
+}
+
+async function submitJourneyDraft() {
+  if (!workspaceId.value || !journeyForm.goal) return
+  busy.draftJ = true
+  try {
+    const j = await callEdge('ai-journey-draft', {
+      workspace_id: workspaceId.value,
+      goal: journeyForm.goal,
+      trigger_event: journeyForm.trigger_event,
+    })
+    toast.success('Journey drafted', `by ${j.used_model}`)
+    openJourneyModal.value = false
+    journeyForm.goal = ''
+    journeyForm.trigger_event = ''
+    await loadAiStudio()
+  } catch (e: any) { toast.error('Could not draft', e.message) }
+  finally { busy.draftJ = false }
+}
+
+async function resolveAnomaly(a: any) {
+  await supabase.from('ai_anomalies').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', a.id)
+  anomalies.value = anomalies.value.filter(x => x.id !== a.id)
+}
+
+async function promoteSegment(s: any) {
+  busy.promote = s.id
+  try {
+    const { data: seg, error } = await supabase.from('segments').insert({
+      workspace_id: workspaceId.value,
+      name: s.name,
+      description: s.description,
+      rules: s.rules,
+    }).select('id').maybeSingle()
+    if (error || !seg) throw error || new Error('Could not create segment')
+    await supabase.from('ai_segment_suggestions').update({ status: 'accepted', segment_id: seg.id }).eq('id', s.id)
+    segSuggestions.value = segSuggestions.value.filter(x => x.id !== s.id)
+    toast.success('Segment created', s.name)
+    router.push('/segments')
+  } catch (e: any) { toast.error('Could not create', e.message) }
+  finally { busy.promote = null }
+}
+
+async function dismissSegSuggestion(s: any) {
+  await supabase.from('ai_segment_suggestions').update({ status: 'dismissed' }).eq('id', s.id)
+  segSuggestions.value = segSuggestions.value.filter(x => x.id !== s.id)
+}
+
+async function promoteJourney(d: any) {
+  busy.promoteJ = d.id
+  try {
+    const { data: j, error } = await supabase.from('journeys').insert({
+      workspace_id: workspaceId.value,
+      name: d.name,
+      description: d.description,
+      status: 'draft',
+      trigger_event: d.trigger_event,
+      nodes: d.nodes,
+      edges: d.edges,
+    }).select('id').maybeSingle()
+    if (error || !j) throw error || new Error('Could not create journey')
+    await supabase.from('ai_journey_drafts').update({ status: 'accepted', journey_id: j.id }).eq('id', d.id)
+    journeyDrafts.value = journeyDrafts.value.filter(x => x.id !== d.id)
+    toast.success('Journey created', d.name)
+    router.push(`/journeys?id=${j.id}`)
+  } catch (e: any) { toast.error('Could not promote', e.message) }
+  finally { busy.promoteJ = null }
+}
+
+async function dismissDraft(d: any) {
+  await supabase.from('ai_journey_drafts').update({ status: 'dismissed' }).eq('id', d.id)
+  journeyDrafts.value = journeyDrafts.value.filter(x => x.id !== d.id)
+}
+
+async function loadAiStudio() {
+  if (!workspaceId.value) return
+  const [a, s, j] = await Promise.all([
+    supabase.from('ai_anomalies').select('*').eq('workspace_id', workspaceId.value).eq('status', 'open').order('detected_at', { ascending: false }).limit(20),
+    supabase.from('ai_segment_suggestions').select('*').eq('workspace_id', workspaceId.value).eq('status', 'pending').order('created_at', { ascending: false }).limit(10),
+    supabase.from('ai_journey_drafts').select('*').eq('workspace_id', workspaceId.value).eq('status', 'pending').order('created_at', { ascending: false }).limit(10),
+  ])
+  anomalies.value = a.data || []
+  segSuggestions.value = s.data || []
+  journeyDrafts.value = j.data || []
+}
 const router = useRouter()
 const attribution = ref<Record<string, { sent: number; opened: number; clicked: number; converted: number }>>({})
 
@@ -564,5 +809,5 @@ async function toggleDef(d: any) {
   await supabase.from('signal_definitions').update({ enabled: next }).eq('id', d.id)
 }
 
-watch(workspaceId, loadAll, { immediate: true })
+watch(workspaceId, async () => { await loadAll(); await loadAiStudio() }, { immediate: true })
 </script>

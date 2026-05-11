@@ -38,29 +38,42 @@ Deno.serve(async (req: Request) => {
 
       const body = JSON.stringify({ event_type, workspace_id, payload, sent_at: new Date().toISOString() });
       const signature = dest.secret ? await hmacSha256(dest.secret, body) : "";
+
+      const MAX_ATTEMPTS = 3;
       let ok = false;
       let status = 0;
       let responseText = "";
-      try {
-        const res = await fetch(dest.url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Pulse-Signature": signature,
-            "X-Pulse-Event": event_type,
-          },
-          body,
-        });
-        status = res.status;
-        ok = res.ok;
-        responseText = (await res.text()).slice(0, 500);
-      } catch (e) {
-        responseText = String(e).slice(0, 500);
+      let attempt = 0;
+      for (attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          const res = await fetch(dest.url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Pulse-Signature": signature,
+              "X-Pulse-Event": event_type,
+              "X-Pulse-Attempt": String(attempt),
+            },
+            body,
+          });
+          status = res.status;
+          ok = res.ok;
+          responseText = (await res.text()).slice(0, 500);
+        } catch (e) {
+          responseText = String(e).slice(0, 500);
+          status = 0;
+          ok = false;
+        }
+        if (ok) break;
+        if (attempt < MAX_ATTEMPTS) {
+          const delay = Math.min(4000, 250 * Math.pow(2, attempt - 1));
+          await new Promise(r => setTimeout(r, delay));
+        }
       }
 
       await supabase.from("webhook_deliveries").insert({
         workspace_id, destination_id: dest.id, event_type, status_code: status,
-        ok, payload, response: responseText,
+        ok, payload, response: responseText, attempt,
       });
       if (ok) {
         await supabase.from("webhook_destinations").update({
@@ -71,6 +84,10 @@ Deno.serve(async (req: Request) => {
         await supabase.from("webhook_destinations").update({
           last_failure_at: new Date().toISOString(), failure_count: (dest.failure_count || 0) + 1,
         }).eq("id", dest.id);
+        await supabase.from("webhook_dlq").insert({
+          workspace_id, destination_id: dest.id, event_type, payload,
+          last_error: responseText, last_status: status, attempts: attempt,
+        });
       }
     }
     return json({ ok: true, delivered });

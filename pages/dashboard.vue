@@ -1,6 +1,11 @@
 <template>
   <div>
-    <PageHeader title="Dashboard" subtitle="Your engagement at a glance." :breadcrumb="displayWs?.name"/>
+    <PageHeader title="Dashboard" subtitle="Your engagement at a glance." :breadcrumb="displayWs?.name">
+      <template #actions>
+        <button @click="shareOpen = true" class="btn-secondary"><Icon name="link" class="w-4 h-4 mr-1.5"/>Share</button>
+        <button @click="reportsOpen = true" class="btn-secondary"><Icon name="mail" class="w-4 h-4 mr-1.5"/>Email reports</button>
+      </template>
+    </PageHeader>
 
     <div class="p-8 space-y-6">
       <TestModeBanner v-if="isTest"/>
@@ -170,6 +175,100 @@
         </div>
       </div>
     </div>
+
+    <Modal v-model="shareOpen" title="Share dashboard" subtitle="Create a read-only link to a snapshot of your dashboard." size="lg">
+      <div class="space-y-4">
+        <div class="flex items-end gap-2">
+          <div class="flex-1">
+            <label class="text-xs font-semibold text-ink-500 uppercase tracking-wider">Label</label>
+            <input v-model="newShareLabel" type="text" placeholder="Executive snapshot" class="input mt-1 w-full"/>
+          </div>
+          <div class="w-40">
+            <label class="text-xs font-semibold text-ink-500 uppercase tracking-wider">Expires</label>
+            <select v-model="newShareExpiry" class="input mt-1 w-full">
+              <option value="">Never</option>
+              <option value="7">In 7 days</option>
+              <option value="30">In 30 days</option>
+              <option value="90">In 90 days</option>
+            </select>
+          </div>
+          <button @click="createShare" class="btn-primary">Create</button>
+        </div>
+
+        <div v-if="!shares.length" class="text-sm text-ink-500 py-6 text-center border border-dashed border-ink-200 rounded-lg">No shared links yet.</div>
+        <div v-else class="space-y-2">
+          <div v-for="sh in shares" :key="sh.id" class="p-3 rounded-lg border border-ink-100 flex items-center justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-ink-900 truncate">{{ sh.label }}</div>
+              <div class="text-xs text-ink-500 mt-0.5 truncate">
+                {{ shareUrl(sh.share_token) }}
+              </div>
+              <div class="text-[11px] text-ink-500 mt-1">
+                Views {{ sh.view_count }} ·
+                <span v-if="sh.expires_at">expires {{ formatDate(sh.expires_at) }}</span>
+                <span v-else>no expiry</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-1">
+              <button @click="copyShare(sh)" class="btn-ghost text-xs" title="Copy link"><Icon name="copy" class="w-4 h-4"/></button>
+              <button @click="revokeShare(sh)" class="btn-ghost text-xs text-red-600" title="Revoke"><Icon name="trash" class="w-4 h-4"/></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Modal>
+
+    <Modal v-model="reportsOpen" title="Scheduled email reports" subtitle="Send a dashboard snapshot to your team on a schedule." size="lg">
+      <div class="space-y-4">
+        <div class="grid grid-cols-12 gap-2 items-end">
+          <div class="col-span-4">
+            <label class="text-xs font-semibold text-ink-500 uppercase tracking-wider">Name</label>
+            <input v-model="newReport.name" type="text" placeholder="Weekly digest" class="input mt-1 w-full"/>
+          </div>
+          <div class="col-span-3">
+            <label class="text-xs font-semibold text-ink-500 uppercase tracking-wider">Cadence</label>
+            <select v-model="newReport.cadence" class="input mt-1 w-full">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <div class="col-span-5">
+            <label class="text-xs font-semibold text-ink-500 uppercase tracking-wider">Recipients</label>
+            <input v-model="newReport.recipients" type="text" placeholder="alice@acme.com, bob@acme.com" class="input mt-1 w-full"/>
+          </div>
+          <div class="col-span-12 flex justify-end">
+            <button @click="createReport" class="btn-primary">Add report</button>
+          </div>
+        </div>
+
+        <div v-if="!reports.length" class="text-sm text-ink-500 py-6 text-center border border-dashed border-ink-200 rounded-lg">No scheduled reports yet.</div>
+        <div v-else class="space-y-2">
+          <div v-for="r in reports" :key="r.id" class="p-3 rounded-lg border border-ink-100">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium text-ink-900">{{ r.name }}</div>
+                <div class="text-xs text-ink-500 mt-0.5 capitalize">
+                  {{ r.cadence }} · {{ (r.recipients || []).length }} recipient(s)
+                </div>
+                <div class="text-[11px] text-ink-500 mt-1">
+                  <span v-if="r.last_run_at">Last run {{ formatDate(r.last_run_at) }} · </span>
+                  <span>Next run {{ formatDate(r.next_run_at) }}</span>
+                  <span v-if="r.last_status === 'partial'" class="text-amber-600 ml-2">Partial: {{ r.last_error }}</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-1">
+                <button @click="sendReportNow(r)" class="btn-ghost text-xs" title="Send now"><Icon name="send" class="w-4 h-4"/></button>
+                <button @click="toggleReport(r)" class="btn-ghost text-xs" :title="r.is_active ? 'Pause' : 'Resume'">
+                  <Icon :name="r.is_active ? 'pause' : 'play'" class="w-4 h-4"/>
+                </button>
+                <button @click="deleteReport(r)" class="btn-ghost text-xs text-red-600" title="Delete"><Icon name="trash" class="w-4 h-4"/></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Modal>
   </div>
 </template>
 
@@ -266,4 +365,107 @@ onMounted(() => { onlineTimer = setInterval(refreshOnline, 60_000) })
 onBeforeUnmount(() => { if (onlineTimer) clearInterval(onlineTimer) })
 
 watch(workspaceId, load, { immediate: true })
+
+// Share links + scheduled reports
+const shareOpen = ref(false)
+const reportsOpen = ref(false)
+const shares = ref<any[]>([])
+const reports = ref<any[]>([])
+const newShareLabel = ref('Executive snapshot')
+const newShareExpiry = ref('')
+const newReport = ref<{ name: string; cadence: string; recipients: string }>({ name: 'Weekly digest', cadence: 'weekly', recipients: '' })
+const toast = useToast()
+
+function formatDate(iso?: string) {
+  if (!iso) return '—'
+  try { return new Date(iso).toLocaleString() } catch { return iso }
+}
+function shareUrl(token: string) {
+  if (typeof window === 'undefined') return `/share/${token}`
+  return `${window.location.origin}/share/${token}`
+}
+function genToken() {
+  const a = new Uint8Array(24)
+  crypto.getRandomValues(a)
+  return Array.from(a).map(b => b.toString(36)).join('').replace(/[^a-z0-9]/g, '').slice(0, 32) || Date.now().toString(36)
+}
+
+async function loadShares() {
+  if (!workspaceId.value) return
+  const { data } = await supabase.from('dashboard_shares').select('*')
+    .eq('workspace_id', workspaceId.value).order('created_at', { ascending: false })
+  shares.value = data || []
+}
+async function loadReports() {
+  if (!workspaceId.value) return
+  const { data } = await supabase.from('scheduled_reports').select('*')
+    .eq('workspace_id', workspaceId.value).order('created_at', { ascending: false })
+  reports.value = data || []
+}
+async function createShare() {
+  if (!workspaceId.value) return
+  const expires_at = newShareExpiry.value ? new Date(Date.now() + Number(newShareExpiry.value) * 24 * 3600 * 1000).toISOString() : null
+  const payload: any = {
+    workspace_id: workspaceId.value,
+    share_token: genToken(),
+    label: newShareLabel.value || 'Shared dashboard',
+    expires_at,
+    created_by: auth.user?.id || null,
+  }
+  const { error } = await supabase.from('dashboard_shares').insert(payload)
+  if (error) return toast.error(error.message)
+  newShareLabel.value = 'Executive snapshot'
+  newShareExpiry.value = ''
+  await loadShares()
+}
+async function copyShare(sh: any) {
+  try { await navigator.clipboard.writeText(shareUrl(sh.share_token)); toast.success('Link copied') } catch {}
+}
+async function revokeShare(sh: any) {
+  const { error } = await supabase.from('dashboard_shares').delete().eq('id', sh.id)
+  if (error) return toast.error(error.message)
+  await loadShares()
+}
+async function createReport() {
+  if (!workspaceId.value) return
+  const recipients = newReport.value.recipients.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean)
+  if (!recipients.length) return toast.error('Add at least one recipient')
+  const { error } = await supabase.from('scheduled_reports').insert({
+    workspace_id: workspaceId.value,
+    name: newReport.value.name || 'Engagement report',
+    cadence: newReport.value.cadence,
+    recipients,
+    scope: 'dashboard',
+  })
+  if (error) return toast.error(error.message)
+  newReport.value = { name: 'Weekly digest', cadence: 'weekly', recipients: '' }
+  await loadReports()
+}
+async function toggleReport(r: any) {
+  await supabase.from('scheduled_reports').update({ is_active: !r.is_active, updated_at: new Date().toISOString() }).eq('id', r.id)
+  await loadReports()
+}
+async function deleteReport(r: any) {
+  await supabase.from('scheduled_reports').delete().eq('id', r.id)
+  await loadReports()
+}
+async function sendReportNow(r: any) {
+  const cfg = useRuntimeConfig()
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token || cfg.public.supabaseAnonKey
+  const res = await fetch(`${cfg.public.supabaseUrl}/functions/v1/scheduled-reports`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ report_id: r.id }),
+  }).then(r => r.json()).catch(e => ({ ok: false, error: String(e) }))
+  if (!res?.ok) toast.error(res?.error || 'Send failed')
+  else toast.success(`Sent to ${res.sent || 0} recipient(s)`)
+  await loadReports()
+}
+
+watch([shareOpen, reportsOpen], ([s, r]) => {
+  if (s) loadShares()
+  if (r) loadReports()
+})
+watch(workspaceId, () => { shares.value = []; reports.value = [] })
 </script>

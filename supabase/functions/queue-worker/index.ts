@@ -14,6 +14,20 @@ function nextBackoff(attempts: number): string {
   return new Date(Date.now() + BACKOFF_SECONDS[idx] * 1000).toISOString();
 }
 
+// Returns an ISO timestamp when the quiet window ends, or null if not currently in quiet hours.
+function quietDeferUntil(tz: string, qs: number, qe: number): string | null {
+  try {
+    const now = new Date();
+    const hourStr = new Intl.DateTimeFormat("en-US", { hour: "2-digit", hour12: false, timeZone: tz || "UTC" }).format(now);
+    const hour = parseInt(hourStr, 10);
+    const inQuiet = qs > qe ? (hour >= qs || hour < qe) : (hour >= qs && hour < qe);
+    if (!inQuiet) return null;
+    let hoursUntil = (qe - hour + 24) % 24;
+    if (hoursUntil === 0) hoursUntil = 24;
+    return new Date(now.getTime() + hoursUntil * 3600 * 1000).toISOString();
+  } catch { return null; }
+}
+
 async function invoke(sb: any, fn: string, body: any): Promise<{ok: boolean; error?: string}> {
   const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/${fn}`;
   const res = await fetch(url, {
@@ -53,12 +67,42 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify({ ok: true, picked: 0 }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const ids = batch.map((r: any) => r.id);
+    // Quiet-hours deferral: per workspace+channel, reschedule instead of sending.
+    const wsIds = Array.from(new Set(batch.map((r: any) => r.workspace_id)));
+    const { data: wsRows } = await sb.from("workspaces").select("id,timezone").in("id", wsIds);
+    const { data: polRows } = await sb.from("messaging_policies").select("workspace_id,channel,quiet_start,quiet_end").in("workspace_id", wsIds);
+    const tzByWs = new Map<string, string>((wsRows || []).map((w: any) => [w.id, w.timezone || "UTC"]));
+    const polByKey = new Map<string, any>((polRows || []).map((p: any) => [`${p.workspace_id}::${p.channel}`, p]));
+
+    const deferred: string[] = [];
+    const runnable: any[] = [];
+    for (const item of batch) {
+      const pol = polByKey.get(`${item.workspace_id}::${item.channel}`);
+      if (pol?.quiet_start && pol?.quiet_end) {
+        const qs = parseInt(String(pol.quiet_start).split(":")[0], 10);
+        const qe = parseInt(String(pol.quiet_end).split(":")[0], 10);
+        if (!Number.isNaN(qs) && !Number.isNaN(qe)) {
+          const defer = quietDeferUntil(tzByWs.get(item.workspace_id) || "UTC", qs, qe);
+          if (defer) {
+            await sb.from("delivery_queue").update({ status: "queued", next_attempt_at: defer, last_error: "deferred_quiet_hours" }).eq("id", item.id);
+            deferred.push(item.id);
+            continue;
+          }
+        }
+      }
+      runnable.push(item);
+    }
+
+    if (!runnable.length) {
+      return new Response(JSON.stringify({ ok: true, picked: batch.length, deferred: deferred.length }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    const ids = runnable.map((r: any) => r.id);
     await sb.from("delivery_queue").update({ status: "running" }).in("id", ids);
 
     let sent = 0, failed = 0, retried = 0;
 
-    for (const item of batch) {
+    for (const item of runnable) {
       const attempts = (item.attempts || 0) + 1;
       let ok = false;
       let err = "";
@@ -73,9 +117,9 @@ Deno.serve(async (req: Request) => {
         } else if (item.channel === "webhook") {
           const r = await invoke(sb, "webhook-dispatch", { ...(item.payload || {}), workspace_id: item.workspace_id });
           ok = r.ok; err = r.error || "";
-        } else if (item.channel === "sms") {
-          // SMS dispatch: log as sent; real provider wiring happens per-workspace. Allows pipeline completeness.
-          ok = true;
+        } else if (item.channel === "sms" || item.channel === "whatsapp" || item.channel === "rcs") {
+          const r = await invoke(sb, "sms-dispatch", { ...(item.payload || {}), workspace_id: item.workspace_id, channel: item.channel });
+          ok = r.ok; err = r.error || "";
         } else {
           ok = false; err = `Unsupported channel: ${item.channel}`;
         }
@@ -101,7 +145,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, picked: batch.length, sent, failed, retried }), {
+    return new Response(JSON.stringify({ ok: true, picked: batch.length, sent, failed, retried, deferred: deferred.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

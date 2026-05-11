@@ -172,6 +172,46 @@
           </div>
         </div>
 
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label">Goal event (for lift)</label>
+            <input v-model="form.goal_event_name" class="input" placeholder="e.g. purchase_completed"/>
+            <div class="text-[11px] text-ink-500 mt-1">Event name counted for treatment vs holdout after send.</div>
+          </div>
+          <div>
+            <label class="label">Attribution window (hours)</label>
+            <input v-model.number="form.goal_window_hours" type="number" min="1" max="720" class="input"/>
+          </div>
+        </div>
+
+        <div v-if="editing?.id && editing.status === 'sent'" class="rounded-xl border border-ink-100 dark:border-[color:var(--border-subtle)] bg-ink-50/40 dark:bg-[color:var(--surface-muted)] p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="font-semibold text-ink-900 dark:text-[color:var(--text-primary)] text-sm">Control-group lift</div>
+              <div class="text-[11px] text-ink-500 dark:text-[color:var(--text-tertiary)]">Compares goal-event conversion between recipients and the held-out control.</div>
+            </div>
+            <button type="button" @click="refreshLift" :disabled="liftLoading" class="btn-secondary !py-1.5 !text-xs">{{ liftLoading ? 'Computing…' : 'Compute lift' }}</button>
+          </div>
+          <div v-if="liftResult" class="grid grid-cols-3 gap-3 text-center">
+            <div class="rounded-lg bg-white dark:bg-[color:var(--surface-card)] border border-ink-100 dark:border-[color:var(--border-subtle)] p-3">
+              <div class="text-[10px] uppercase tracking-wider text-ink-500">Treatment</div>
+              <div class="text-lg font-bold text-ink-900 dark:text-[color:var(--text-primary)]">{{ liftResult.treatmentRate }}%</div>
+              <div class="text-[10px] text-ink-500">{{ liftResult.treatment_conversions || 0 }} / {{ liftResult.treatment_size || 0 }}</div>
+            </div>
+            <div class="rounded-lg bg-white dark:bg-[color:var(--surface-card)] border border-ink-100 dark:border-[color:var(--border-subtle)] p-3">
+              <div class="text-[10px] uppercase tracking-wider text-ink-500">Control</div>
+              <div class="text-lg font-bold text-ink-900 dark:text-[color:var(--text-primary)]">{{ liftResult.controlRate }}%</div>
+              <div class="text-[10px] text-ink-500">{{ liftResult.control_conversions || 0 }} / {{ liftResult.control_size || 0 }}</div>
+            </div>
+            <div class="rounded-lg bg-white dark:bg-[color:var(--surface-card)] border border-ink-100 dark:border-[color:var(--border-subtle)] p-3">
+              <div class="text-[10px] uppercase tracking-wider text-ink-500">Lift</div>
+              <div class="text-lg font-bold" :class="liftResult.lift >= 0 ? 'text-accent-500' : 'text-red-600'">{{ liftResult.lift >= 0 ? '+' : '' }}{{ liftResult.lift }}%</div>
+              <div class="text-[10px] text-ink-500">{{ liftResult.goal || 'no goal set' }}</div>
+            </div>
+          </div>
+          <div v-else class="text-xs text-ink-500">Set a goal event above, save the campaign, then compute lift after your attribution window has elapsed.</div>
+        </div>
+
         <div class="pt-4 border-t border-ink-100">
           <div class="flex items-center justify-between mb-3">
             <div>
@@ -242,7 +282,7 @@
 <script setup lang="ts">
 const { supabase, workspaceId, auth } = useWorkspace()
 const displayWs = computed<any>(() => auth.displayWorkspace)
-const { sendCampaign, resolveAudience } = useEngagement()
+const { sendCampaign, resolveAudience, computeCampaignLift } = useEngagement()
 const role = useRole()
 const audit = useAudit()
 const { $supabase } = useNuxtApp()
@@ -280,8 +320,41 @@ const form = reactive<any>({
   holdout_percent: 0, send_time_mode: 'immediate',
   variant_strategy: 'random', winner_metric: 'open_rate',
   amp_html: '',
+  goal_event_name: '', goal_window_hours: 72,
 })
 const ampEnabled = ref(false)
+const liftLoading = ref(false)
+const liftResult = ref<any>(null)
+
+function formatLift(raw: any) {
+  if (!raw) return null
+  const ts = Number(raw.treatment_size) || 0
+  const cs = Number(raw.control_size) || 0
+  const tc = Number(raw.treatment_conversions) || 0
+  const cc = Number(raw.control_conversions) || 0
+  const tRate = ts ? (tc / ts) * 100 : 0
+  const cRate = cs ? (cc / cs) * 100 : 0
+  const lift = cRate > 0 ? ((tRate - cRate) / cRate) * 100 : (tRate > 0 ? 100 : 0)
+  return {
+    ...raw,
+    treatmentRate: tRate.toFixed(2),
+    controlRate: cRate.toFixed(2),
+    lift: lift.toFixed(1),
+  }
+}
+
+async function refreshLift() {
+  if (!editing.value?.id) return
+  liftLoading.value = true
+  try {
+    const data = await computeCampaignLift(editing.value.id)
+    liftResult.value = formatLift(data)
+  } catch (e: any) {
+    useToast().error('Lift computation failed', e?.message || '')
+  } finally {
+    liftLoading.value = false
+  }
+}
 const previewContext = computed(() => {
   const cust = previewCustomers.value.find((c: any) => c.id === previewCustomerId.value)
   return sampleContext(cust)
@@ -374,6 +447,7 @@ async function edit(c: any) {
   editing.value = c
   recipients.value = []
   variants.value = []
+  liftResult.value = null
   if (c) {
     Object.assign(form, {
       name: c.name, channel: c.channel, audience_type: c.audience_type, audience_id: c.audience_id || '',
@@ -381,7 +455,17 @@ async function edit(c: any) {
       holdout_percent: c.holdout_percent || 0, send_time_mode: c.send_time_mode || 'immediate',
       variant_strategy: c.variant_strategy || 'random', winner_metric: c.winner_metric || 'open_rate',
       amp_html: c.amp_html || '',
+      goal_event_name: c.goal_event_name || '', goal_window_hours: c.goal_window_hours || 72,
     })
+    if (c.lift_computed_at) {
+      liftResult.value = formatLift({
+        goal: c.goal_event_name,
+        treatment_size: c.lift_treatment_size,
+        control_size: c.lift_control_size,
+        treatment_conversions: c.lift_treatment_conversions,
+        control_conversions: c.lift_control_conversions,
+      })
+    }
     ampEnabled.value = !!c.amp_html
     const [msgs, vars] = await Promise.all([
       supabase.from('campaign_messages').select('*, customer:customers(email)').eq('campaign_id', c.id).order('sent_at', { ascending: false }).limit(30),
@@ -396,6 +480,7 @@ async function edit(c: any) {
       holdout_percent: 0, send_time_mode: 'immediate',
       variant_strategy: 'random', winner_metric: 'open_rate',
       amp_html: '',
+      goal_event_name: '', goal_window_hours: 72,
     })
     ampEnabled.value = false
   }
@@ -419,6 +504,8 @@ async function buildPayload(): Promise<any> {
     variant_strategy: form.variant_strategy,
     winner_metric: form.winner_metric,
     amp_html: ampEnabled.value ? form.amp_html : '',
+    goal_event_name: form.goal_event_name || '',
+    goal_window_hours: Number(form.goal_window_hours) || 72,
     workspace_id: workspaceId.value,
     status: form.scheduled_at ? 'scheduled' : (editing.value?.status || 'draft'),
   }

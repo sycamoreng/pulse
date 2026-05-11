@@ -3,9 +3,7 @@
     <div class="flex-1 flex items-center justify-center p-8">
       <div class="w-full max-w-md">
         <NuxtLink to="/" class="flex items-center gap-2 mb-8">
-          <div class="w-9 h-9 rounded-lg bg-brand-500 flex items-center justify-center">
-            <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 12h3l2-8 4 16 3-10 2 5h6"/></svg>
-          </div>
+          <img src="/pulse-app-icon.svg" alt="Pulse" class="w-9 h-9 rounded-lg"/>
           <span class="font-bold text-lg text-brand-900">Pulse</span>
         </NuxtLink>
         <h1 class="text-3xl font-bold text-ink-900">Create your workspace</h1>

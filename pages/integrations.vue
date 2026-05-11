@@ -205,6 +205,140 @@
         </div>
       </div>
 
+      <!-- Integration Hub -->
+      <div v-if="tab === 'hub'" class="space-y-4">
+        <div class="card p-6">
+          <div class="font-semibold text-ink-900 dark:text-[color:var(--text-primary)]">Integration hub</div>
+          <div class="text-xs text-ink-500 dark:text-[color:var(--text-tertiary)] mt-1">Connect your ops and analytics stack. Pulse encrypts every credential server-side and never surfaces them back to this UI.</div>
+        </div>
+        <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div v-for="p in hubProviders" :key="p.id" class="card p-5 flex flex-col">
+            <div class="flex items-start gap-3">
+              <div class="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" :style="{ background: p.accent + '18' }">
+                <svg viewBox="0 0 24 24" class="w-6 h-6" :style="{ fill: p.accent }" aria-hidden="true"><path :d="p.logoPath"/></svg>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <div class="font-semibold text-ink-900 dark:text-[color:var(--text-primary)] text-sm">{{ p.label }}</div>
+                  <span v-if="hubConnectionFor(p.id)?.has_credentials" class="chip text-[10px] bg-accent-500/10 text-accent-500">connected</span>
+                </div>
+                <div class="text-[11px] text-ink-500 dark:text-[color:var(--text-tertiary)] uppercase tracking-wider mt-0.5">{{ p.category }}</div>
+              </div>
+            </div>
+            <div class="text-sm font-medium text-ink-800 dark:text-[color:var(--text-secondary)] mt-3">{{ p.summary }}</div>
+            <div class="text-[12px] leading-relaxed text-ink-600 dark:text-[color:var(--text-tertiary)] mt-1.5">{{ p.description }}</div>
+            <ul class="mt-3 space-y-1">
+              <li v-for="c in p.capabilities" :key="c" class="text-[11px] text-ink-700 dark:text-[color:var(--text-secondary)] flex items-start gap-1.5">
+                <Icon name="check" class="w-3 h-3 text-accent-500 mt-0.5 shrink-0"/>
+                <span>{{ c }}</span>
+              </li>
+            </ul>
+            <div class="mt-4 pt-3 border-t border-ink-100 dark:border-[color:var(--border)] flex items-center gap-2">
+              <button @click="openHubConnect(p)" class="btn-secondary !py-1.5 !text-xs">{{ hubConnectionFor(p.id) ? 'Manage' : 'Connect' }}</button>
+              <button v-if="hubConnectionFor(p.id)?.has_credentials" @click="testHub(p)" :disabled="hubTesting === p.id" class="btn-ghost !py-1.5 !text-xs">{{ hubTesting === p.id ? 'Testing...' : 'Send test' }}</button>
+            </div>
+            <div v-if="hubConnectionFor(p.id)?.last_error" class="text-[11px] text-red-500 mt-2 truncate">{{ hubConnectionFor(p.id).last_error }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SMS / WhatsApp / RCS -->
+      <div v-if="tab === 'sms'" class="space-y-4">
+        <div class="card p-6 flex items-start justify-between gap-4">
+          <div class="max-w-2xl">
+            <div class="font-semibold text-ink-900 dark:text-[color:var(--text-primary)]">SMS, WhatsApp &amp; RCS providers</div>
+            <div class="text-xs text-ink-500 dark:text-[color:var(--text-tertiary)] mt-1">Connect Twilio to deliver campaigns and journey messages over SMS, WhatsApp Business, or RCS. Credentials are encrypted at rest and never leave the platform. Campaigns in test-mode workspaces skip real dispatch.</div>
+          </div>
+          <button @click="newSmsProvider" class="btn-primary shrink-0"><Icon name="plus"/>New sender</button>
+        </div>
+
+        <div v-if="!smsProviders.length" class="card p-8 text-center text-sm text-ink-500 dark:text-[color:var(--text-tertiary)]">No senders configured. Platform Twilio credentials (if set) will be used as a fallback.</div>
+
+        <div v-for="p in smsProviders" :key="p.id" class="card p-4 flex items-center justify-between gap-3 flex-wrap">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <div class="font-semibold text-ink-900 dark:text-[color:var(--text-primary)] text-sm capitalize">{{ p.provider.replace('_', ' ') }}</div>
+              <span class="chip text-[10px] uppercase" :class="p.channel === 'whatsapp' ? 'bg-accent-500/10 text-accent-500' : p.channel === 'rcs' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400' : 'bg-brand-100/40 text-brand-700 dark:text-brand-400'">{{ p.channel }}</span>
+              <span class="chip text-[10px]" :class="p.is_active ? 'bg-accent-500/10 text-accent-500' : 'bg-ink-100 dark:bg-[color:var(--surface-muted)] text-ink-700 dark:text-[color:var(--text-secondary)]'">{{ p.is_active ? 'active' : 'disabled' }}</span>
+            </div>
+            <div class="text-[11px] text-ink-500 dark:text-[color:var(--text-tertiary)] mt-1 font-mono">{{ p.messaging_service_sid || p.from_number || 'no sender' }}</div>
+            <div class="text-[11px] mt-1">
+              <span v-if="p.has_credentials" class="chip bg-accent-500/10 text-accent-500">credentials connected</span>
+              <span v-else class="chip bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">no credentials</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <button @click="openSmsCredentials(p)" class="btn-secondary !py-1 !text-xs">{{ p.has_credentials ? 'Update credentials' : 'Connect' }}</button>
+            <button @click="testSms(p)" :disabled="smsTesting === p.id || !p.has_credentials" class="btn-ghost !py-1 !text-xs">{{ smsTesting === p.id ? 'Sending...' : 'Test send' }}</button>
+            <button @click="editSmsProvider(p)" class="btn-ghost !py-1 !text-xs">Edit</button>
+          </div>
+        </div>
+      </div>
+
+    <Modal v-model="smsOpen" :title="smsForm.id ? 'Edit sender' : 'New sender'">
+      <form id="smsf" @submit.prevent="saveSmsProvider" class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="label">Provider</label>
+            <select v-model="smsForm.provider" class="input">
+              <option value="twilio">Twilio</option>
+              <option value="twilio_whatsapp">Twilio WhatsApp</option>
+              <option value="twilio_rcs">Twilio RCS</option>
+            </select>
+          </div>
+          <div><label class="label">Channel</label>
+            <select v-model="smsForm.channel" class="input">
+              <option value="sms">SMS</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="rcs">RCS</option>
+            </select>
+          </div>
+        </div>
+        <div><label class="label">From number (E.164)</label><input v-model="smsForm.from_number" class="input font-mono" placeholder="+14155551234"/></div>
+        <div><label class="label">Messaging Service SID <span class="text-ink-400">(optional, overrides From)</span></label><input v-model="smsForm.messaging_service_sid" class="input font-mono" placeholder="MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"/></div>
+        <div class="text-[11px] text-ink-500">Save the sender first, then click <span class="font-medium">Connect</span> on the sender row to supply the Account SID and Auth Token securely. Credentials are encrypted on the server and never surfaced to the UI again.</div>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="smsForm.is_active"/> Active</label>
+      </form>
+      <template #footer>
+        <button v-if="smsForm.id" @click="deleteSmsProvider" class="btn-ghost text-red-600 dark:text-red-400 mr-auto">Delete</button>
+        <button @click="smsOpen = false" class="btn-secondary">Cancel</button>
+        <button form="smsf" type="submit" class="btn-primary">Save</button>
+      </template>
+    </Modal>
+
+    <Modal v-model="smsCredsOpen" :title="smsCredsForm.has ? 'Update Twilio credentials' : 'Connect Twilio'">
+      <form id="smscf" @submit.prevent="saveSmsCredentials" class="space-y-3">
+        <div class="text-xs text-ink-500">Credentials are encrypted on the server and never shown back to the UI. Leave the auth token blank to keep the existing one.</div>
+        <div><label class="label">Account SID *</label><input v-model="smsCredsForm.account_sid" class="input font-mono" required placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"/></div>
+        <div><label class="label">Auth Token {{ smsCredsForm.has ? '(leave blank to keep current)' : '*' }}</label>
+          <input v-model="smsCredsForm.auth_token" type="password" class="input font-mono" :required="!smsCredsForm.has" placeholder="••••••••••••"/></div>
+      </form>
+      <template #footer>
+        <button @click="smsCredsOpen = false" class="btn-secondary">Cancel</button>
+        <button form="smscf" type="submit" class="btn-primary" :disabled="smsCredsSaving">{{ smsCredsSaving ? 'Saving...' : 'Save credentials' }}</button>
+      </template>
+    </Modal>
+
+    <Modal v-model="hubCredsOpen" :title="hubCredsForm.connection_id ? `Update ${hubCredsForm.label}` : `Connect ${hubCredsForm.label}`">
+      <form id="hubcf" @submit.prevent="saveHubConnection" class="space-y-3">
+        <div class="text-xs text-ink-500">Secret fields are encrypted server-side. Leave them blank when updating if you want to keep the current values.</div>
+        <div><label class="label">Name</label><input v-model="hubCredsForm.name" class="input" :placeholder="hubCredsForm.label"/></div>
+        <div v-for="f in hubCredsForm.configFields" :key="f">
+          <label class="label">{{ hubFieldLabel(f) }}</label>
+          <input v-model="hubCredsForm.config[f]" class="input font-mono" :placeholder="hubFieldPlaceholder(f)"/>
+        </div>
+        <div v-for="f in hubCredsForm.secretFields" :key="f">
+          <label class="label">{{ hubFieldLabel(f) }} {{ hubCredsForm.connection_id ? '(leave blank to keep)' : '*' }}</label>
+          <textarea v-if="f.includes('json')" v-model="hubCredsForm.secrets[f]" rows="4" class="input font-mono text-xs" :required="!hubCredsForm.connection_id" :placeholder="hubFieldPlaceholder(f)"></textarea>
+          <input v-else v-model="hubCredsForm.secrets[f]" type="password" class="input font-mono" :required="!hubCredsForm.connection_id" :placeholder="hubFieldPlaceholder(f)"/>
+        </div>
+      </form>
+      <template #footer>
+        <button v-if="hubCredsForm.connection_id" @click="disconnectHub" class="btn-ghost text-red-600 mr-auto">Disconnect</button>
+        <button @click="hubCredsOpen = false" class="btn-secondary">Cancel</button>
+        <button form="hubcf" type="submit" class="btn-primary" :disabled="hubCredsSaving">{{ hubCredsSaving ? 'Saving...' : 'Save' }}</button>
+      </template>
+    </Modal>
+
     <Modal v-model="destOpen" :title="destForm.id ? 'Edit audience destination' : 'New audience destination'">
       <form id="df" @submit.prevent="saveDest" class="space-y-3">
         <div><label class="label">Name</label><input v-model="destForm.name" class="input" placeholder="Meta — VIP list"/></div>
@@ -419,6 +553,8 @@ const tabs = computed(() => {
     { id: 'keys', label: 'API keys', icon: 'shield' },
     { id: 'exports', label: 'Scheduled exports', icon: 'upload' },
     { id: 'audiences', label: 'Ad audiences', icon: 'users' },
+    { id: 'sms', label: 'SMS / WhatsApp', icon: 'send' },
+    { id: 'hub', label: 'Integration hub', icon: 'layers' },
   )
   return base
 })
@@ -496,7 +632,7 @@ async function load() {
   if (!workspaceId.value) return
   const ordersFrom = (ordersPage.value - 1) * ordersPageSize.value
   const ordersTo = ordersFrom + ordersPageSize.value - 1
-  const [o, h, k, s, d, sy, ls, sg] = await Promise.all([
+  const [o, h, k, s, d, sy, ls, sg, sp] = await Promise.all([
     supabase.from('commerce_orders').select('*', { count: 'exact' }).eq('workspace_id', workspaceId.value).order('occurred_at', { ascending: false }).range(ordersFrom, ordersTo),
     supabase.from('webhook_destinations').select('*').eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }),
     supabase.from('api_keys').select('*').eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }),
@@ -505,6 +641,7 @@ async function load() {
     supabase.from('ad_audience_syncs').select('*').eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }).limit(20),
     supabase.from('lists').select('id, name').eq('workspace_id', workspaceId.value).order('name'),
     supabase.from('segments').select('id, name').eq('workspace_id', workspaceId.value).order('name'),
+    supabase.from('sms_providers').select('*').eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }),
   ])
   orders.value = o.data || []
   ordersTotal.value = o.count || 0
@@ -515,6 +652,62 @@ async function load() {
   syncs.value = sy.data || []
   lists.value = ls.data || []
   segments.value = sg.data || []
+  smsProviders.value = sp.data || []
+}
+
+const smsProviders = ref<any[]>([])
+const smsOpen = ref(false)
+const smsTesting = ref('')
+const smsForm = reactive<any>({ id: '', provider: 'twilio', channel: 'sms', from_number: '', messaging_service_sid: '', is_active: true })
+function newSmsProvider() {
+  Object.assign(smsForm, { id: '', provider: 'twilio', channel: 'sms', from_number: '', messaging_service_sid: '', is_active: true })
+  smsOpen.value = true
+}
+function editSmsProvider(p: any) {
+  Object.assign(smsForm, {
+    id: p.id, provider: p.provider, channel: p.channel,
+    from_number: p.from_number || '', messaging_service_sid: p.messaging_service_sid || '',
+    is_active: p.is_active,
+  })
+  smsOpen.value = true
+}
+async function saveSmsProvider() {
+  const payload = {
+    workspace_id: workspaceId.value, provider: smsForm.provider, channel: smsForm.channel,
+    from_number: smsForm.from_number || '', messaging_service_sid: smsForm.messaging_service_sid || '',
+    is_active: !!smsForm.is_active,
+  }
+  const { error } = smsForm.id
+    ? await supabase.from('sms_providers').update(payload).eq('id', smsForm.id)
+    : await supabase.from('sms_providers').insert(payload)
+  if (error) { useToast().error('Save failed', error.message); return }
+  smsOpen.value = false; await load(); useToast().success('Sender saved')
+}
+async function deleteSmsProvider() {
+  if (!smsForm.id) return
+  const { error } = await supabase.from('sms_providers').delete().eq('id', smsForm.id)
+  if (error) { useToast().error('Delete failed', error.message); return }
+  smsOpen.value = false; await load()
+}
+async function testSms(p: any) {
+  const phone = window.prompt('Send a test message to which phone number? (E.164, e.g. +14155551234)')
+  if (!phone) return
+  smsTesting.value = p.id
+  try {
+    const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sms-dispatch`
+    const res = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace_id: workspaceId.value, to_phone: phone, body: 'Pulse test message', channel: p.channel, kind: 'test' }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (json?.ok) useToast().success('Test sent', `Status: ${json.status}`)
+    else useToast().error('Test failed', json?.error || json?.status || 'Unknown error')
+  } catch (e: any) {
+    useToast().error('Test failed', String(e?.message || e))
+  } finally {
+    smsTesting.value = ''
+  }
 }
 
 function newDest() {
@@ -722,6 +915,245 @@ async function deleteSchedule() {
   schedOpen.value = false; await load()
 }
 
+// ----- SMS credentials (encrypted) -----
+const smsCredsOpen = ref(false)
+const smsCredsSaving = ref(false)
+const smsCredsForm = reactive<{ provider_id: string; account_sid: string; auth_token: string; has: boolean }>({
+  provider_id: '', account_sid: '', auth_token: '', has: false,
+})
+function openSmsCredentials(p: any) {
+  smsCredsForm.provider_id = p.id
+  smsCredsForm.account_sid = ''
+  smsCredsForm.auth_token = ''
+  smsCredsForm.has = !!p.has_credentials
+  smsCredsOpen.value = true
+}
+async function saveSmsCredentials() {
+  if (!smsCredsForm.provider_id || !smsCredsForm.account_sid) return
+  smsCredsSaving.value = true
+  try {
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sms-connect`
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({
+        provider_id: smsCredsForm.provider_id,
+        workspace_id: workspaceId.value,
+        credentials: { account_sid: smsCredsForm.account_sid, auth_token: smsCredsForm.auth_token },
+      }),
+    })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok || !j.ok) throw new Error(j.error || `HTTP ${res.status}`)
+    smsCredsOpen.value = false
+    useToast().success('Credentials saved')
+    await load()
+  } catch (e: any) {
+    useToast().error('Save failed', e.message)
+  } finally {
+    smsCredsSaving.value = false
+  }
+}
+
+// ----- Integration hub -----
+const hubProviders = [
+  {
+    id: 'slack', label: 'Slack', category: 'Ops & alerts', accent: '#4A154B',
+    logoPath: 'M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z',
+    summary: 'Real-time alerts to a Slack channel.',
+    description: 'Route campaign summaries, anomaly detections, and high-intent customer signals to any Slack channel via an incoming webhook. Use it so your growth and support teams see movement the moment it happens — no dashboard refresh required.',
+    capabilities: ['Campaign launch + send summaries', 'AI anomaly & churn-risk alerts', 'Journey failure notifications'],
+  },
+  {
+    id: 'mixpanel', label: 'Mixpanel', category: 'Product analytics', accent: '#7856FF',
+    logoPath: 'M1.2 10.8a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4zm10.8 0a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4zm10.8 0a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4zM6.6 9.6a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8zm10.8 0a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8z',
+    summary: 'Mirror Pulse events into Mixpanel.',
+    description: 'Stream every tracked event from Pulse into Mixpanel using a service account, so product, marketing, and growth teams analyse behaviour in the tool they already use. Event properties, distinct IDs, and timestamps are preserved end-to-end.',
+    capabilities: ['Server-side event import', 'Shared distinct_id for stitching', 'Strict schema mode'],
+  },
+  {
+    id: 'adjust', label: 'Adjust', category: 'Mobile attribution', accent: '#2D4DDE',
+    logoPath: 'M12 0L0 12l12 12 12-12L12 0zm0 4.8L19.2 12 12 19.2 4.8 12 12 4.8z',
+    summary: 'Server-to-server mobile conversion events.',
+    description: 'Forward Pulse conversion events to Adjust with per-event token mapping, so paid acquisition campaigns can optimise on real downstream actions — not just installs. Supports IDFA / GPS ADID passthrough and revenue.',
+    capabilities: ['S2S event forwarding', 'Per-event token map', 'Revenue + currency attribution'],
+  },
+  {
+    id: 'metabase', label: 'Metabase', category: 'BI & dashboards', accent: '#509EE3',
+    logoPath: 'M5.558 15.056c-.88 0-1.594.715-1.594 1.595s.714 1.594 1.594 1.594 1.594-.714 1.594-1.594-.714-1.595-1.594-1.595zm0-5.845c-.88 0-1.594.714-1.594 1.594 0 .881.714 1.595 1.594 1.595s1.594-.714 1.594-1.595c0-.88-.714-1.594-1.594-1.594zM5.558 3.366C4.678 3.366 3.964 4.08 3.964 4.96s.714 1.594 1.594 1.594 1.594-.713 1.594-1.594c0-.88-.714-1.594-1.594-1.594zM12 15.056c-.88 0-1.595.715-1.595 1.595S11.12 18.245 12 18.245s1.594-.714 1.594-1.594S12.88 15.056 12 15.056zm0-5.845c-.88 0-1.595.714-1.595 1.594 0 .881.715 1.595 1.595 1.595s1.594-.714 1.594-1.595c0-.88-.713-1.594-1.594-1.594zM12 3.366C11.12 3.366 10.405 4.08 10.405 4.96S11.12 6.554 12 6.554s1.594-.713 1.594-1.594c0-.88-.713-1.594-1.594-1.594zM18.442 15.056c-.88 0-1.594.715-1.594 1.595s.713 1.594 1.594 1.594c.881 0 1.595-.714 1.595-1.594s-.714-1.595-1.595-1.595zm0-5.845c-.88 0-1.594.714-1.594 1.594 0 .881.713 1.595 1.594 1.595.881 0 1.595-.714 1.595-1.595 0-.88-.714-1.594-1.595-1.594zM18.442 3.366c-.88 0-1.594.714-1.594 1.594s.713 1.594 1.594 1.594c.881 0 1.595-.713 1.595-1.594 0-.88-.714-1.594-1.595-1.594z',
+    summary: 'Embed saved questions into Pulse.',
+    description: 'Pull the JSON result of any Metabase saved question into Pulse using an API key. Perfect for surfacing warehouse-derived KPIs right next to engagement metrics, without rebuilding the query in a second tool.',
+    capabilities: ['Query saved cards by ID', 'Self-hosted or Metabase Cloud', 'API-key auth (no cookie proxy)'],
+  },
+  {
+    id: 'sheets', label: 'Google Sheets', category: 'Exports & ops', accent: '#0F9D58',
+    logoPath: 'M14.4 0H3.6A1.6 1.6 0 0 0 2 1.6v20.8A1.6 1.6 0 0 0 3.6 24h16.8a1.6 1.6 0 0 0 1.6-1.6V7.6L14.4 0zm-.8 1.6h.4L21 8h-6.6a.8.8 0 0 1-.8-.8V1.6zM6 11h12v2H6v-2zm0 3h12v2H6v-2zm0 3h12v2H6v-2z',
+    summary: 'Append exports to a spreadsheet.',
+    description: 'Send cohort snapshots, campaign results, and customer exports straight to a Google Sheet via a service account. Useful for finance reconciliations, weekly exec reviews, or any workflow that lives in a spreadsheet.',
+    capabilities: ['Append rows to a worksheet', 'Service-account JWT auth', 'Schedule via Pulse reports'],
+  },
+  {
+    id: 'gcs', label: 'Google Cloud Storage', category: 'Warehouse staging', accent: '#4285F4',
+    logoPath: 'M12.19 2.38a9.344 9.344 0 0 0-9.234 6.893c.053-.02-.055.013 0 0-3.875 2.551-3.922 8.11-.247 10.941l.006-.007-.007.03a6.717 6.717 0 0 0 4.077 1.356h5.173l.03.002h5.192c2.828 0 5.442-1.266 6.916-3.438 1.475-2.173 1.653-4.96.491-7.302l-.043-.086-.004-.007v-.001c-.116-.225-.245-.445-.385-.658l-.002-.001v-.002a7.728 7.728 0 0 0-.53-.676l-.119-.131a7.476 7.476 0 0 0-.243-.253l-.128-.124a7.196 7.196 0 0 0-.612-.515l-.002-.002-.002-.002a7.5 7.5 0 0 0-2.964-1.317l-.028-.005a7.542 7.542 0 0 0-.704-.098 7.497 7.497 0 0 0-.463-.024h-.056a7.544 7.544 0 0 0-.497.016l-.013.001a9.356 9.356 0 0 0-5.586-4.57v-.002a9.362 9.362 0 0 0-.727-.16l-.014-.003a9.28 9.28 0 0 0-.584-.079l-.036-.004a9.145 9.145 0 0 0-.85-.042z',
+    summary: 'Stage files for BigQuery loads.',
+    description: 'Write JSON or CSV exports to a GCS bucket. Ideal for teams that land data in a Google warehouse: pair with a scheduled BigQuery load job or Dataform to move engagement data into your lakehouse.',
+    capabilities: ['Service-account upload', 'Configurable prefix / path', 'Great for BigQuery pipelines'],
+  },
+  {
+    id: 's3', label: 'Amazon S3', category: 'Warehouse staging', accent: '#E25444',
+    logoPath: 'M20.913 13.147l-.12.076-7.369 2.595v6.511l7.489-2.28v-6.902zm.894-.187v7.708l-.27.275-8.24 2.508-.38.121v-8.334l.27-.122 8.24-2.9zM3.087 13.147l.12.076 7.369 2.595v6.511l-7.489-2.28v-6.902zm-.894-.187v7.708l.27.275 8.24 2.508.38.121v-8.334l-.27-.122-8.24-2.9zM11.999.249l-.38.121L2.193 3.51l-.27.09v2.898l.894-.283V4.225L12 1.23l9.183 2.995v1.99l.894.283V3.6l-.27-.09-9.427-3.14L12 .25zm0 9.66l-.38.121-9.426 3.14-.27.09v-2.898l.894-.283v1.99L12 13.994l9.183-2.995V9.009l.894.283v2.898l-.27.09-9.427 3.14-.38-.12z',
+    summary: 'Stage files for Redshift / Snowflake / Athena.',
+    description: 'Ship exports to any S3 bucket using native AWS SigV4 signing. Works with Snowflake external stages, Redshift COPY, Athena, and Databricks — so your warehouse team owns the load on their own terms.',
+    capabilities: ['AWS SigV4 PutObject', 'Region + prefix control', 'IAM access key pair (rotatable)'],
+  },
+]
+const hubConnections = ref<any[]>([])
+const hubTesting = ref<string>('')
+const hubCredsOpen = ref(false)
+const hubCredsSaving = ref(false)
+const hubCredsForm = reactive<{
+  connection_id: string; provider: string; label: string; name: string;
+  configFields: string[]; secretFields: string[];
+  config: Record<string, string>; secrets: Record<string, string>;
+}>({
+  connection_id: '', provider: '', label: '', name: '',
+  configFields: [], secretFields: [], config: {}, secrets: {},
+})
+
+const hubSchemas: Record<string, { config: string[]; secret: string[] }> = {
+  slack:    { config: ['default_channel'],          secret: ['webhook_url'] },
+  mixpanel: { config: ['project_id'],               secret: ['service_account_user', 'service_account_password'] },
+  adjust:   { config: ['app_token'],                secret: ['event_token_map', 'environment'] },
+  metabase: { config: ['base_url'],                 secret: ['api_key'] },
+  sheets:   { config: ['spreadsheet_id', 'worksheet'], secret: ['service_account_json'] },
+  gcs:      { config: ['bucket', 'prefix'],         secret: ['service_account_json'] },
+  s3:       { config: ['bucket', 'region', 'prefix'], secret: ['access_key_id', 'secret_access_key'] },
+}
+
+function hubFieldLabel(f: string) {
+  return f.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+function hubFieldPlaceholder(f: string) {
+  if (f === 'webhook_url') return 'https://hooks.slack.com/services/...'
+  if (f === 'default_channel') return '#pulse-alerts'
+  if (f === 'project_id') return 'Mixpanel project token'
+  if (f === 'base_url') return 'https://metabase.mycompany.com'
+  if (f === 'spreadsheet_id') return '1A2B3C...'
+  if (f === 'worksheet') return 'Sheet1'
+  if (f === 'bucket') return 'pulse-exports'
+  if (f === 'region') return 'us-east-1'
+  if (f === 'prefix') return 'pulse/'
+  if (f === 'environment') return 'production or sandbox'
+  if (f.includes('json')) return '{ "type": "service_account", ... }'
+  return ''
+}
+function hubConnectionFor(provider: string) {
+  return hubConnections.value.find(c => c.provider === provider) || null
+}
+function openHubConnect(p: { id: string; label: string }) {
+  const schema = hubSchemas[p.id]
+  const existing = hubConnectionFor(p.id)
+  hubCredsForm.provider = p.id
+  hubCredsForm.label = p.label
+  hubCredsForm.connection_id = existing?.id || ''
+  hubCredsForm.name = existing?.name || p.label
+  hubCredsForm.configFields = schema.config
+  hubCredsForm.secretFields = schema.secret
+  hubCredsForm.config = {}
+  hubCredsForm.secrets = {}
+  for (const f of schema.config) hubCredsForm.config[f] = existing?.config?.[f] ?? ''
+  for (const f of schema.secret) hubCredsForm.secrets[f] = ''
+  hubCredsOpen.value = true
+}
+async function saveHubConnection() {
+  hubCredsSaving.value = true
+  try {
+    const secrets: Record<string, any> = {}
+    for (const [k, v] of Object.entries(hubCredsForm.secrets)) {
+      if (v === '' || v == null) continue
+      secrets[k] = v
+    }
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/integration-connect`
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({
+        workspace_id: workspaceId.value,
+        provider: hubCredsForm.provider,
+        name: hubCredsForm.name,
+        connection_id: hubCredsForm.connection_id || undefined,
+        config: hubCredsForm.config,
+        secrets,
+      }),
+    })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok || !j.ok) throw new Error(j.error || `HTTP ${res.status}`)
+    hubCredsOpen.value = false
+    useToast().success('Integration saved')
+    await loadHub()
+  } catch (e: any) {
+    useToast().error('Save failed', e.message)
+  } finally {
+    hubCredsSaving.value = false
+  }
+}
+async function disconnectHub() {
+  if (!hubCredsForm.connection_id) return
+  const ok = await useConfirm().ask({ title: `Disconnect ${hubCredsForm.label}?`, tone: 'danger', confirmText: 'Disconnect' })
+  if (!ok) return
+  await supabase.from('integration_connections').delete().eq('id', hubCredsForm.connection_id)
+  hubCredsOpen.value = false
+  useToast().success('Disconnected')
+  await loadHub()
+}
+async function testHub(p: { id: string; label: string }) {
+  const conn = hubConnectionFor(p.id)
+  if (!conn) return
+  hubTesting.value = p.id
+  try {
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/integration-dispatch`
+    const payload: any = p.id === 'slack'
+      ? { text: `Pulse test from ${workspaceId.value}` }
+      : p.id === 'metabase'
+      ? { card_id: 1 }
+      : p.id === 'mixpanel'
+      ? { events: [{ name: 'pulse_test', properties: {}, distinct_id: 'pulse-test' }] }
+      : { filename: 'pulse-test.json', content: { ok: true, at: new Date().toISOString() } }
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ workspace_id: workspaceId.value, provider: p.id, connection_id: conn.id, payload }),
+    })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok || !j.ok) throw new Error(j.error || `HTTP ${res.status}`)
+    useToast().success(`${p.label} test ok`)
+    await loadHub()
+  } catch (e: any) {
+    useToast().error(`${p.label} test failed`, e.message)
+  } finally {
+    hubTesting.value = ''
+  }
+}
+async function loadHub() {
+  if (!workspaceId.value) return
+  const { data } = await supabase.from('integration_connections').select('*').eq('workspace_id', workspaceId.value).order('created_at', { ascending: false })
+  hubConnections.value = data || []
+}
+
 watch(ordersPageSize, () => { ordersPage.value = 1 })
 watch([workspaceId, ordersPage, ordersPageSize], load, { immediate: true })
+watch(workspaceId, loadHub, { immediate: true })
 </script>

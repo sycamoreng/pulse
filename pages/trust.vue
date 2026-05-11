@@ -235,7 +235,135 @@
           </div>
         </div>
       </div>
+
+      <!-- IP POOLS -->
+      <div v-if="tab === 'ippools'">
+        <div class="card p-5 mb-4 flex items-center justify-between">
+          <div>
+            <div class="font-semibold text-ink-900">Sending IP pools</div>
+            <div class="text-xs text-ink-500 mt-1">Segment your traffic across shared, dedicated, transactional, and bulk pools. Warm up new IPs in 6 stages.</div>
+          </div>
+          <button @click="openPool()" class="btn-primary"><Icon name="plus"/>New pool</button>
+        </div>
+        <div v-if="!pools.length" class="card">
+          <EmptyState icon="layers" title="No IP pools yet" subtitle="Create pools to isolate transactional and bulk traffic for better reputation."/>
+        </div>
+        <div v-else class="grid md:grid-cols-2 gap-4">
+          <div v-for="p in pools" :key="p.id" class="card p-5">
+            <div class="flex items-center justify-between mb-2">
+              <div>
+                <div class="font-semibold text-ink-900">{{ p.name }}</div>
+                <div class="text-xs text-ink-500 capitalize">{{ p.pool_type }} pool · cap {{ p.daily_cap.toLocaleString() }}/day</div>
+              </div>
+              <span v-if="p.is_default" class="chip bg-accent-500/15 text-accent-500">Default</span>
+            </div>
+            <div class="mt-3">
+              <div class="text-[11px] font-semibold text-ink-500 uppercase tracking-wider mb-1">Warmup stage</div>
+              <div class="flex gap-1">
+                <div v-for="i in 6" :key="i" class="flex-1 h-2 rounded-full" :class="i <= p.warmup_stage ? 'bg-brand-500' : 'bg-ink-100'"></div>
+              </div>
+              <div class="text-[11px] text-ink-500 mt-1">Stage {{ p.warmup_stage }} / 6</div>
+            </div>
+            <div class="mt-3 text-xs">
+              <div class="text-[11px] font-semibold text-ink-500 uppercase tracking-wider mb-1">IPs</div>
+              <div class="font-mono text-[11px] text-ink-700 break-all">{{ (p.ip_addresses || []).join(', ') || '—' }}</div>
+            </div>
+            <div v-if="p.notes" class="mt-2 text-xs text-ink-500">{{ p.notes }}</div>
+            <div class="mt-4 flex justify-end gap-2">
+              <button @click="openPool(p)" class="btn-ghost text-xs"><Icon name="edit" class="w-4 h-4"/>Edit</button>
+              <button @click="deletePool(p)" class="btn-ghost text-xs text-red-600"><Icon name="trash" class="w-4 h-4"/>Delete</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- WEBHOOK DLQ -->
+      <div v-if="tab === 'dlq'">
+        <div class="card p-5 mb-4 flex items-center justify-between">
+          <div>
+            <div class="font-semibold text-ink-900">Failed webhook deliveries</div>
+            <div class="text-xs text-ink-500 mt-1">Each row exhausted its retries. Resolve after investigating, or replay once the endpoint is healthy.</div>
+          </div>
+          <div class="text-xs text-ink-500">{{ unresolvedDlq }} unresolved</div>
+        </div>
+        <div v-if="!dlq.length" class="card">
+          <EmptyState icon="check" title="No failed webhooks" subtitle="Permanent delivery failures will land here."/>
+        </div>
+        <div v-else class="card overflow-hidden">
+          <table class="w-full">
+            <thead><tr>
+              <th class="table-th">Event</th>
+              <th class="table-th">Status</th>
+              <th class="table-th">Attempts</th>
+              <th class="table-th">Failed</th>
+              <th class="table-th">Last error</th>
+              <th class="table-th"></th>
+            </tr></thead>
+            <tbody>
+              <tr v-for="d in dlq" :key="d.id" class="hover:bg-ink-50">
+                <td class="table-td font-mono text-xs">{{ d.event_type || '—' }}</td>
+                <td class="table-td"><span class="chip" :class="d.last_status >= 500 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'">{{ d.last_status || 'net error' }}</span></td>
+                <td class="table-td text-xs">{{ d.attempts }}</td>
+                <td class="table-td text-xs text-ink-500 whitespace-nowrap">{{ formatDateTime(d.failed_at) }}</td>
+                <td class="table-td text-xs text-ink-500 truncate max-w-[260px]" :title="d.last_error">{{ d.last_error }}</td>
+                <td class="table-td text-right whitespace-nowrap">
+                  <span v-if="d.resolved_at" class="chip bg-accent-500/15 text-accent-500">Resolved</span>
+                  <template v-else>
+                    <button @click="replayDlq(d)" class="btn-ghost text-xs"><Icon name="refresh" class="w-4 h-4"/>Replay</button>
+                    <button @click="resolveDlq(d)" class="btn-ghost text-xs"><Icon name="check" class="w-4 h-4"/>Resolve</button>
+                  </template>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
+
+    <!-- IP pool modal -->
+    <Modal v-model="poolOpen" :title="poolEditing?.id ? 'Edit IP pool' : 'New IP pool'">
+      <form id="poolf" @submit.prevent="savePool" class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label">Name</label>
+            <input v-model="poolForm.name" class="input" required placeholder="Transactional"/>
+          </div>
+          <div>
+            <label class="label">Pool type</label>
+            <select v-model="poolForm.pool_type" class="input">
+              <option value="shared">Shared</option>
+              <option value="dedicated">Dedicated</option>
+              <option value="transactional">Transactional</option>
+              <option value="bulk">Bulk</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Warmup stage (1-6)</label>
+            <input v-model.number="poolForm.warmup_stage" type="number" min="1" max="6" class="input"/>
+          </div>
+          <div>
+            <label class="label">Daily cap</label>
+            <input v-model.number="poolForm.daily_cap" type="number" min="100" class="input"/>
+          </div>
+        </div>
+        <div>
+          <label class="label">IP addresses (one per line)</label>
+          <textarea v-model="poolIpsText" rows="3" class="input font-mono text-xs" placeholder="192.0.2.10&#10;192.0.2.11"></textarea>
+        </div>
+        <div>
+          <label class="label">Notes</label>
+          <input v-model="poolForm.notes" class="input" placeholder="e.g. ramped to 5k/day on 2026-04-01"/>
+        </div>
+        <label class="flex items-center gap-2 text-sm">
+          <input type="checkbox" v-model="poolForm.is_default" class="w-4 h-4 accent-brand-500"/>
+          Use as default pool
+        </label>
+      </form>
+      <template #footer>
+        <button @click="poolOpen = false" class="btn-secondary">Cancel</button>
+        <button form="poolf" type="submit" class="btn-primary">Save</button>
+      </template>
+    </Modal>
 
     <!-- Consent modal -->
     <Modal v-model="consentOpen" :title="consentEditing?.id ? 'Edit consent' : 'Record consent'">
@@ -314,8 +442,10 @@ const tabs = [
   { id: 'consent', label: 'Consent', icon: 'users' },
   { id: 'predictive', label: 'Predictive audiences', icon: 'trending' },
   { id: 'inbox', label: 'Inbox placement', icon: 'send' },
+  { id: 'ippools', label: 'IP pools', icon: 'layers' },
+  { id: 'dlq', label: 'Webhook DLQ', icon: 'alert' },
 ]
-const tab = ref<'audit' | 'consent' | 'predictive' | 'inbox'>('audit')
+const tab = ref<'audit' | 'consent' | 'predictive' | 'inbox' | 'ippools' | 'dlq'>('audit')
 
 // AUDIT
 const auditLogs = ref<any[]>([])
@@ -509,6 +639,101 @@ async function runPlacementTest() {
   }
 }
 
+// IP POOLS
+const pools = ref<any[]>([])
+const poolOpen = ref(false)
+const poolEditing = ref<any>(null)
+const poolForm = reactive({ name: '', pool_type: 'shared', warmup_stage: 1, daily_cap: 10000, notes: '', is_default: false })
+const poolIpsText = ref('')
+function openPool(p?: any) {
+  poolEditing.value = p || null
+  if (p) {
+    poolForm.name = p.name
+    poolForm.pool_type = p.pool_type
+    poolForm.warmup_stage = p.warmup_stage
+    poolForm.daily_cap = p.daily_cap
+    poolForm.notes = p.notes || ''
+    poolForm.is_default = !!p.is_default
+    poolIpsText.value = (p.ip_addresses || []).join('\n')
+  } else {
+    poolForm.name = ''
+    poolForm.pool_type = 'shared'
+    poolForm.warmup_stage = 1
+    poolForm.daily_cap = 10000
+    poolForm.notes = ''
+    poolForm.is_default = false
+    poolIpsText.value = ''
+  }
+  poolOpen.value = true
+}
+async function savePool() {
+  const ips = poolIpsText.value.split(/[\s,]+/).map(s => s.trim()).filter(Boolean)
+  const payload: any = {
+    workspace_id: workspaceId.value,
+    name: poolForm.name,
+    pool_type: poolForm.pool_type,
+    warmup_stage: Math.max(1, Math.min(6, poolForm.warmup_stage || 1)),
+    daily_cap: Math.max(100, poolForm.daily_cap || 10000),
+    ip_addresses: ips,
+    notes: poolForm.notes,
+    is_default: !!poolForm.is_default,
+    updated_at: new Date().toISOString(),
+  }
+  if (poolEditing.value?.id) {
+    if (payload.is_default) await supabase.from('ip_pools').update({ is_default: false }).eq('workspace_id', workspaceId.value).neq('id', poolEditing.value.id)
+    const { error } = await supabase.from('ip_pools').update(payload).eq('id', poolEditing.value.id)
+    if (error) { useToast().error('Save failed', error.message); return }
+  } else {
+    if (payload.is_default) await supabase.from('ip_pools').update({ is_default: false }).eq('workspace_id', workspaceId.value)
+    const { error } = await supabase.from('ip_pools').insert(payload)
+    if (error) { useToast().error('Save failed', error.message); return }
+  }
+  poolOpen.value = false
+  useToast().success('Pool saved')
+  await loadPools()
+}
+async function deletePool(p: any) {
+  const ok = await useConfirm().ask({ title: `Delete ${p.name}?`, tone: 'danger', confirmText: 'Delete' })
+  if (!ok) return
+  await supabase.from('ip_pools').delete().eq('id', p.id)
+  await loadPools()
+}
+async function loadPools() {
+  if (!workspaceId.value) return
+  const { data } = await supabase.from('ip_pools').select('*').eq('workspace_id', workspaceId.value).order('created_at', { ascending: false })
+  pools.value = data || []
+}
+
+// WEBHOOK DLQ
+const dlq = ref<any[]>([])
+const unresolvedDlq = computed(() => dlq.value.filter(d => !d.resolved_at).length)
+async function loadDlq() {
+  if (!workspaceId.value) return
+  const { data } = await supabase.from('webhook_dlq').select('*').eq('workspace_id', workspaceId.value).order('failed_at', { ascending: false }).limit(100)
+  dlq.value = data || []
+}
+async function replayDlq(d: any) {
+  const cfg = useRuntimeConfig()
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token || cfg.public.supabaseAnonKey
+  const res = await fetch(`${cfg.public.supabaseUrl}/functions/v1/webhook-dispatch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ workspace_id: d.workspace_id, event_type: d.event_type, payload: d.payload, destination_id: d.destination_id }),
+  }).then(r => r.json()).catch(e => ({ ok: false, error: String(e) }))
+  if (res?.delivered || res?.ok) {
+    await supabase.from('webhook_dlq').update({ resolved_at: new Date().toISOString() }).eq('id', d.id)
+    useToast().success('Replayed')
+  } else {
+    useToast().error('Replay failed', res?.error || 'Still failing')
+  }
+  await loadDlq()
+}
+async function resolveDlq(d: any) {
+  await supabase.from('webhook_dlq').update({ resolved_at: new Date().toISOString() }).eq('id', d.id)
+  await loadDlq()
+}
+
 async function loadAudit() {
   if (!workspaceId.value) return
   const { data } = await supabase.from('audit_logs').select('*').eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }).limit(300)
@@ -547,5 +772,7 @@ watch([workspaceId, tab], async () => {
   else if (tab.value === 'consent') await loadConsents()
   else if (tab.value === 'predictive') await loadScores()
   else if (tab.value === 'inbox') { await loadSeeds(); await loadTests() }
+  else if (tab.value === 'ippools') await loadPools()
+  else if (tab.value === 'dlq') await loadDlq()
 }, { immediate: true })
 </script>

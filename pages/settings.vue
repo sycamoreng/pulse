@@ -437,6 +437,74 @@
             </tbody>
           </table>
         </div>
+
+        <div class="card p-6">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <div class="font-semibold text-ink-900">Retention policies</div>
+              <div class="text-xs text-ink-500 mt-1">Automatically delete rows older than a chosen age. Runs daily.</div>
+            </div>
+          </div>
+          <div class="divide-y divide-ink-100">
+            <div v-for="ent in retentionEntities" :key="ent.key" class="py-3 flex items-center gap-4">
+              <div class="flex-1">
+                <div class="text-sm font-medium text-ink-900">{{ ent.label }}</div>
+                <div class="text-[11px] text-ink-500">{{ ent.hint }}</div>
+              </div>
+              <label class="flex items-center gap-2 text-xs text-ink-500">
+                <input type="checkbox" v-model="retentionState[ent.key].is_active" class="w-4 h-4 accent-brand-500"/>
+                Enabled
+              </label>
+              <input v-model.number="retentionState[ent.key].retain_days" type="number" min="7" max="3650" class="input !py-1.5 !w-28 text-center"/>
+              <span class="text-xs text-ink-500 w-8">days</span>
+              <button @click="saveRetentionPolicy(ent.key)" class="btn-secondary !py-1.5 !text-xs">Save</button>
+              <button @click="runRetentionNow(ent.key)" class="btn-ghost !py-1.5 !text-xs" title="Run now">
+                <Icon name="refresh" class="w-4 h-4"/>
+              </button>
+              <div class="text-[11px] text-ink-500 w-40 text-right">
+                <span v-if="retentionState[ent.key].last_run_at">
+                  Last run: {{ retentionState[ent.key].last_deleted }} removed
+                </span>
+                <span v-else>Never run</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card p-6">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <div class="font-semibold text-ink-900">SCIM provisioning</div>
+              <div class="text-xs text-ink-500 mt-1">Generate bearer tokens your IdP can use to sync members via SCIM 2.0.</div>
+            </div>
+            <button @click="createScimToken" class="btn-primary" :disabled="!isOwner"><Icon name="plus"/>New token</button>
+          </div>
+          <div class="text-[11px] text-ink-500 mb-3">
+            Endpoint: <code class="text-ink-900">{{ scimBase }}</code>
+          </div>
+          <div v-if="revealedToken" class="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200">
+            <div class="text-xs font-semibold text-amber-900 mb-1">Copy this token now — it won't be shown again.</div>
+            <div class="font-mono text-xs break-all text-ink-900">{{ revealedToken }}</div>
+            <button @click="revealedToken = ''" class="mt-2 btn-ghost !py-1 !text-xs">Dismiss</button>
+          </div>
+          <EmptyState v-if="!scimTokens.length" icon="shield" title="No SCIM tokens" subtitle="Generate one to connect Okta, Entra ID, JumpCloud or any SCIM 2.0 IdP."/>
+          <table v-else class="w-full">
+            <thead><tr>
+              <th class="table-th">Name</th><th class="table-th">Prefix</th><th class="table-th">Created</th><th class="table-th">Last used</th><th class="table-th"></th>
+            </tr></thead>
+            <tbody>
+              <tr v-for="t in scimTokens" :key="t.id" class="hover:bg-ink-50">
+                <td class="table-td">{{ t.name }}</td>
+                <td class="table-td font-mono text-xs">{{ t.token_prefix }}…</td>
+                <td class="table-td text-xs text-ink-500">{{ timeAgo(t.created_at) }}</td>
+                <td class="table-td text-xs text-ink-500">{{ t.last_used_at ? timeAgo(t.last_used_at) : 'Never' }}</td>
+                <td class="table-td text-right">
+                  <button @click="revokeScimToken(t)" class="btn-ghost !py-1 !text-xs text-red-600"><Icon name="trash"/>Revoke</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <!-- Plan & usage -->
@@ -520,7 +588,11 @@
                 <span class="capitalize">{{ a.entity_type }}</span>
                 <span v-if="a.entity_name" class="font-semibold"> · {{ a.entity_name }}</span>
               </div>
-              <div class="text-[11px] text-ink-500 mt-0.5">{{ timeAgo(a.created_at) }}</div>
+              <div class="text-[11px] text-ink-500 mt-0.5">
+                {{ timeAgo(a.created_at) }}
+                <span v-if="a.ip_address" class="ml-2">· IP {{ a.ip_address }}</span>
+                <span v-if="a.user_agent" class="ml-2 truncate max-w-[280px] inline-block align-bottom" :title="a.user_agent">· {{ shortUa(a.user_agent) }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -874,6 +946,100 @@ async function saveRetention() {
   if (data) auth.workspace = data
   audit.log('update', 'workspace', workspaceId.value, 'Data retention', { data_retention_days: days })
   toast.success('Retention updated', `${days} days`)
+}
+
+// ---------- Retention policies (per entity) ----------
+const retentionEntities = [
+  { key: 'events', label: 'Events', hint: 'Raw user events older than this will be purged.' },
+  { key: 'audit_logs', label: 'Audit logs', hint: 'Admin action history — keep long enough for compliance.' },
+  { key: 'campaign_messages', label: 'Campaign messages', hint: 'Per-send records (sent/open/click history).' },
+  { key: 'customer_signals', label: 'Customer signals', hint: 'Behavioural signal firings.' },
+]
+type RetPolicy = { id?: string; entity: string; retain_days: number; is_active: boolean; last_run_at?: string; last_deleted?: number }
+const retentionState = ref<Record<string, RetPolicy>>({})
+for (const ent of retentionEntities) retentionState.value[ent.key] = { entity: ent.key, retain_days: 365, is_active: false, last_deleted: 0 }
+
+async function loadRetentionPolicies() {
+  if (!workspaceId.value) return
+  const { data } = await supabase.from('retention_policies').select('*').eq('workspace_id', workspaceId.value)
+  for (const ent of retentionEntities) {
+    const existing = (data || []).find((r: any) => r.entity === ent.key)
+    retentionState.value[ent.key] = existing
+      ? { id: existing.id, entity: ent.key, retain_days: existing.retain_days, is_active: existing.is_active, last_run_at: existing.last_run_at, last_deleted: existing.last_deleted }
+      : { entity: ent.key, retain_days: 365, is_active: false, last_deleted: 0 }
+  }
+}
+
+async function saveRetentionPolicy(key: string) {
+  if (!workspaceId.value) return
+  const s = retentionState.value[key]
+  const retain_days = Math.max(7, Math.min(3650, Number(s.retain_days) || 365))
+  const payload: any = { workspace_id: workspaceId.value, entity: key, retain_days, is_active: s.is_active, updated_at: new Date().toISOString() }
+  const { error } = await supabase.from('retention_policies').upsert(payload, { onConflict: 'workspace_id,entity' })
+  if (error) return toast.error('Could not save policy', error.message)
+  audit.log('update', 'retention_policy', null, key, { retain_days, is_active: s.is_active })
+  toast.success('Retention policy saved')
+  await loadRetentionPolicies()
+}
+
+async function runRetentionNow(key: string) {
+  if (!workspaceId.value) return
+  const cfg = useRuntimeConfig()
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token || cfg.public.supabaseAnonKey
+  const s = retentionState.value[key]
+  const res = await fetch(`${cfg.public.supabaseUrl}/functions/v1/retention-runner`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ workspace_id: workspaceId.value, entity: key, retain_days: s.retain_days }),
+  }).then(r => r.json()).catch(e => ({ ok: false, error: String(e) }))
+  if (!res?.ok) return toast.error('Run failed', res?.error)
+  toast.success(`Removed ${res.deleted} rows`)
+  await loadRetentionPolicies()
+}
+
+// ---------- SCIM tokens ----------
+const scimTokens = ref<any[]>([])
+const revealedToken = ref('')
+const scimBase = computed(() => {
+  const cfg = useRuntimeConfig()
+  return `${cfg.public.supabaseUrl}/functions/v1/scim/scim`
+})
+
+async function loadScimTokens() {
+  if (!workspaceId.value) return
+  const { data } = await supabase.from('scim_tokens').select('*')
+    .eq('workspace_id', workspaceId.value).order('created_at', { ascending: false })
+  scimTokens.value = data || []
+}
+
+async function createScimToken() {
+  if (!workspaceId.value) return
+  const cfg = useRuntimeConfig()
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token || cfg.public.supabaseAnonKey
+  const res = await fetch(`${cfg.public.supabaseUrl}/functions/v1/scim-token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ workspace_id: workspaceId.value, name: 'SCIM token' }),
+  }).then(r => r.json()).catch(e => ({ ok: false, error: String(e) }))
+  if (!res?.ok) return toast.error('Could not create', res?.error)
+  revealedToken.value = res.token
+  audit.log('create', 'scim_token', res.record?.id || null, 'SCIM token', {})
+  await loadScimTokens()
+}
+
+async function revokeScimToken(t: any) {
+  const { error } = await supabase.from('scim_tokens').delete().eq('id', t.id)
+  if (error) return toast.error('Could not revoke', error.message)
+  audit.log('delete', 'scim_token', t.id, t.name, {})
+  await loadScimTokens()
+}
+
+function shortUa(ua: string) {
+  if (!ua) return ''
+  const m = ua.match(/(Chrome|Firefox|Safari|Edge|OPR)\/[\d.]+/)
+  return m ? m[0] : ua.slice(0, 40)
 }
 
 async function requestExport() {
@@ -1291,7 +1457,10 @@ async function purge() {
   toast.success('Workspace data cleared')
 }
 
-watch(workspaceId, loadAll, { immediate: true })
+async function loadPhase9() {
+  await Promise.all([loadRetentionPolicies(), loadScimTokens()])
+}
+watch(workspaceId, async () => { await loadAll(); await loadPhase9() }, { immediate: true })
 
 onMounted(async () => {
   const route = useRoute()

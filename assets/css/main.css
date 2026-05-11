@@ -3,45 +3,47 @@
 @tailwind utilities;
 
 :root {
-  --surface-app: #F5F8FA;
+  --surface-app: #F1F5F9;
   --surface-card: #FFFFFF;
   --surface-raised: #FFFFFF;
-  --surface-muted: #F5F8FA;
-  --surface-inverted: #0B1E27;
-  --border-subtle: #E8EEF2;
-  --border-strong: #cfd9df;
-  --text-primary: #0B1E27;
-  --text-secondary: #2A3F49;
-  --text-tertiary: #536771;
-  --text-muted: #8B9CA5;
+  --surface-muted: #F1F5F9;
+  --surface-inverted: #06141A;
+  --border-subtle: #E2E8F0;
+  --border-strong: #CBD5E1;
+  --text-primary: #06141A;
+  --text-secondary: #1E2A33;
+  --text-tertiary: #475569;
+  --text-muted: #94A3B8;
   --text-inverted: #FFFFFF;
-  --brand-100-tinted: rgba(160, 210, 255, 0.20);
-  --scrollbar-thumb: #cfd9df;
-  --scrollbar-thumb-hover: #8B9CA5;
-  --code-bg: #F5F8FA;
-  --pre-bg: #0B1E27;
-  --pre-text: #F5F8FA;
+  --brand-100-tinted: rgba(6, 182, 212, 0.18);
+  --ai-tinted: rgba(139, 92, 246, 0.12);
+  --scrollbar-thumb: #CBD5E1;
+  --scrollbar-thumb-hover: #94A3B8;
+  --code-bg: #F1F5F9;
+  --pre-bg: #06141A;
+  --pre-text: #F1F5F9;
 }
 
 .dark {
-  --surface-app: #0A1620;
+  --surface-app: #06141A;
   --surface-card: #0F1F2B;
   --surface-raised: #13283A;
   --surface-muted: #0D1C28;
-  --surface-inverted: #F5F8FA;
+  --surface-inverted: #F1F5F9;
   --border-subtle: #1F3445;
   --border-strong: #2A4A62;
-  --text-primary: #E8EEF2;
-  --text-secondary: #C5D3DC;
-  --text-tertiary: #8B9CA5;
-  --text-muted: #6A7E8B;
-  --text-inverted: #0B1E27;
-  --brand-100-tinted: rgba(48, 135, 185, 0.18);
+  --text-primary: #E2E8F0;
+  --text-secondary: #CBD5E1;
+  --text-tertiary: #94A3B8;
+  --text-muted: #64748B;
+  --text-inverted: #06141A;
+  --brand-100-tinted: rgba(6, 182, 212, 0.18);
+  --ai-tinted: rgba(139, 92, 246, 0.18);
   --scrollbar-thumb: #2A4A62;
   --scrollbar-thumb-hover: #3E6687;
   --code-bg: #13283A;
-  --pre-bg: #050D13;
-  --pre-text: #C5D3DC;
+  --pre-bg: #04080C;
+  --pre-text: #CBD5E1;
 }
 
 html, body, #__nuxt {
@@ -54,10 +56,12 @@ html, body, #__nuxt {
 
 @layer components {
   .btn { @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed; }
-  .btn-primary { @apply btn bg-brand-500 text-white hover:bg-brand-700; }
+  .btn-primary { @apply btn bg-brand-500 text-white hover:bg-brand-600 shadow-sm shadow-brand-500/20; }
   .btn-secondary { @apply btn border border-ink-100 dark:border-[color:var(--border-subtle)] text-ink-900 dark:text-[color:var(--text-primary)] bg-white dark:bg-[color:var(--surface-card)] hover:bg-ink-50 dark:hover:bg-[color:var(--surface-muted)]; }
   .btn-ghost { @apply btn text-ink-700 dark:text-[color:var(--text-secondary)] hover:bg-ink-50 dark:hover:bg-[color:var(--surface-muted)]; }
-  .btn-danger { @apply btn bg-red-500 text-white hover:bg-red-600; }
+  .btn-danger { @apply btn bg-danger-500 text-white hover:bg-danger-700; }
+  .btn-ai { @apply btn bg-ai-500 text-white hover:bg-ai-600 shadow-sm shadow-ai-500/25; }
+  .chip-ai { @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-ai-50 text-ai-700; }
   .input { @apply w-full px-3 py-2 bg-white dark:bg-[color:var(--surface-card)] border border-ink-100 dark:border-[color:var(--border-subtle)] text-ink-900 dark:text-[color:var(--text-primary)] placeholder:text-ink-300 dark:placeholder:text-[color:var(--text-muted)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-500 transition; }
   .label { @apply block text-xs font-medium text-ink-700 dark:text-[color:var(--text-secondary)] mb-1.5; }
   .card { @apply bg-white dark:bg-[color:var(--surface-card)] rounded-xl border border-ink-100 dark:border-[color:var(--border-subtle)] shadow-soft; }
@@ -93,12 +97,14 @@ html, body, #__nuxt {
 
 /* Tinted brand/accent/semantic backgrounds used without dark: variants.
    Keep them visible against dark surfaces with reduced alpha. */
-.dark .bg-brand-50 { background-color: rgba(48, 135, 185, 0.10) !important; }
-.dark .bg-brand-100 { background-color: rgba(48, 135, 185, 0.15) !important; }
-.dark .bg-brand-100\/60 { background-color: rgba(48, 135, 185, 0.18) !important; }
-.dark .bg-brand-100\/40 { background-color: rgba(48, 135, 185, 0.12) !important; }
-.dark .bg-accent-50 { background-color: rgba(38, 193, 101, 0.10) !important; }
-.dark .bg-accent-100 { background-color: rgba(38, 193, 101, 0.15) !important; }
+.dark .bg-brand-50 { background-color: rgba(6, 182, 212, 0.10) !important; }
+.dark .bg-brand-100 { background-color: rgba(6, 182, 212, 0.15) !important; }
+.dark .bg-brand-100\/60 { background-color: rgba(6, 182, 212, 0.18) !important; }
+.dark .bg-brand-100\/40 { background-color: rgba(6, 182, 212, 0.12) !important; }
+.dark .bg-accent-50 { background-color: rgba(16, 185, 129, 0.10) !important; }
+.dark .bg-accent-100 { background-color: rgba(16, 185, 129, 0.15) !important; }
+.dark .bg-ai-50 { background-color: rgba(139, 92, 246, 0.10) !important; }
+.dark .bg-ai-100 { background-color: rgba(139, 92, 246, 0.18) !important; }
 .dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.12) !important; }
 .dark .bg-red-100 { background-color: rgba(239, 68, 68, 0.18) !important; }
 .dark .border-red-100 { border-color: rgba(239, 68, 68, 0.35) !important; }
@@ -113,22 +119,28 @@ html, body, #__nuxt {
 .dark .text-brand-700 { color: #7DB8D9 !important; }
 
 /* Hero-style gradients that fade from a tint into white — flip to dark surface. */
-.dark .from-brand-50 { --tw-gradient-from: rgba(48, 135, 185, 0.12) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgba(48, 135, 185, 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+.dark .from-brand-50 { --tw-gradient-from: rgba(6, 182, 212, 0.12) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgba(6, 182, 212, 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
 .dark .via-white { --tw-gradient-to: rgba(10, 22, 32, 0) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--surface-app) var(--tw-gradient-via-position), var(--tw-gradient-to) !important; }
 .dark .to-white { --tw-gradient-to: var(--surface-app) var(--tw-gradient-to-position) !important; }
 .dark .from-white { --tw-gradient-from: var(--surface-app) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgba(10, 22, 32, 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
 
 /* Preserve solid surfaces on brand/colored backgrounds — those already have white text. */
-.dark .bg-brand-500, .dark .bg-brand-700, .dark .bg-brand-900,
-.dark .bg-red-500, .dark .bg-red-600, .dark .bg-accent-500,
+.dark .bg-brand-500, .dark .bg-brand-600, .dark .bg-brand-700, .dark .bg-brand-900,
+.dark .bg-red-500, .dark .bg-red-600, .dark .bg-accent-500, .dark .bg-accent-600,
+.dark .bg-ai-500, .dark .bg-ai-600, .dark .bg-ai-700,
 .dark .bg-ink-900 { background-color: unset; }
-.dark .bg-brand-500 { background-color: #3087B9 !important; }
-.dark .bg-brand-700 { background-color: #0A445C !important; }
-.dark .bg-brand-900 { background-color: #073042 !important; }
+.dark .bg-brand-500 { background-color: #06B6D4 !important; }
+.dark .bg-brand-600 { background-color: #0891B2 !important; }
+.dark .bg-brand-700 { background-color: #0E7490 !important; }
+.dark .bg-brand-900 { background-color: #164E63 !important; }
 .dark .bg-red-500 { background-color: #EF4444 !important; }
 .dark .bg-red-600 { background-color: #DC2626 !important; }
-.dark .bg-accent-500 { background-color: #26C165 !important; }
-.dark .bg-ink-900 { background-color: #0B1E27 !important; }
+.dark .bg-accent-500 { background-color: #10B981 !important; }
+.dark .bg-accent-600 { background-color: #059669 !important; }
+.dark .bg-ai-500 { background-color: #8B5CF6 !important; }
+.dark .bg-ai-600 { background-color: #7C3AED !important; }
+.dark .bg-ai-700 { background-color: #6D28D9 !important; }
+.dark .bg-ink-900 { background-color: #06141A !important; }
 
 /* Landing header — translucent over app background in both themes. */
 .landing-header { background-color: rgba(255, 255, 255, 0.8); }

@@ -4,9 +4,7 @@
     <aside class="fixed left-0 top-0 bottom-0 w-60 bg-ink-900 text-white flex flex-col">
       <div class="px-5 py-5 border-b border-white/10">
         <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center">
-            <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 12h3l2-8 4 16 3-10 2 5h6"/></svg>
-          </div>
+          <img src="/pulse-app-icon.svg" alt="Pulse" class="w-8 h-8 rounded-lg"/>
           <div>
             <div class="font-bold text-sm">Pulse Admin</div>
             <div class="text-[10px] text-white/50">Internal · platform ops</div>
