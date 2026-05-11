@@ -37,7 +37,46 @@
       </div>
     </div>
 
-    <div class="p-8 pt-6 grid lg:grid-cols-3 gap-6">
+    <div class="p-8 pt-6 space-y-6">
+      <div v-if="signals.length || recos.length" class="card p-6 border-l-4 border-brand-500">
+        <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
+          <div>
+            <div class="flex items-center gap-2">
+              <Icon name="flask" class="w-4 h-4 text-brand-500"/>
+              <div class="font-semibold text-ink-900">Next best action</div>
+            </div>
+            <div class="text-xs text-ink-500">Behavioural signals and AI suggestions for this customer.</div>
+          </div>
+          <button @click="recommendForCustomer" :disabled="nbaBusy" class="btn-secondary text-xs">
+            <Icon name="refresh" class="w-3 h-3" :class="nbaBusy ? 'animate-spin' : ''"/>{{ nbaBusy ? 'Thinking…' : 'Refresh suggestion' }}
+          </button>
+        </div>
+
+        <div v-if="signals.length" class="flex flex-wrap gap-2 mb-4">
+          <span v-for="s in signals" :key="s.id" class="chip text-[10px] bg-brand-500/10 text-brand-500">
+            {{ s.signal_label || s.signal_key }} · {{ Math.round(Number(s.confidence)*100) }}%
+          </span>
+        </div>
+
+        <div v-if="topReco" class="rounded-xl border border-ink-100 p-4 bg-gradient-to-br from-white to-brand-50/50">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="chip text-[10px] bg-brand-500 text-white capitalize">{{ topReco.channel }}</span>
+            <span v-if="topReco.signal_key" class="chip text-[10px] bg-ink-100 text-ink-700">{{ topReco.signal_key }}</span>
+            <span class="ml-auto text-[10px] text-ink-500">{{ Math.round(Number(topReco.confidence)*100) }}% confidence</span>
+          </div>
+          <div class="font-semibold text-ink-900">{{ topReco.headline }}</div>
+          <div class="text-sm text-ink-700 mt-1">{{ topReco.body }}</div>
+          <button v-if="topReco.cta" class="mt-2 chip bg-brand-500 text-white text-[11px]">{{ topReco.cta }}</button>
+          <div v-if="topReco.reasoning" class="mt-3 text-[11px] text-ink-500 italic">“{{ topReco.reasoning }}”</div>
+          <div class="mt-3 flex items-center gap-2">
+            <button class="btn-ghost text-xs" @click="useReco(topReco)"><Icon name="send" class="w-3 h-3"/>Use in campaign</button>
+            <button class="btn-ghost text-xs text-ink-500" @click="dismissReco(topReco)"><Icon name="x" class="w-3 h-3"/>Dismiss</button>
+          </div>
+        </div>
+        <div v-else-if="signals.length" class="text-sm text-ink-500">Click <span class="font-medium">Refresh suggestion</span> to generate a recommendation.</div>
+      </div>
+
+      <div class="grid lg:grid-cols-3 gap-6">
       <div class="card p-6 lg:col-span-1">
         <div class="font-semibold text-ink-900 mb-3">Profile</div>
         <dl class="space-y-3 text-sm">
@@ -65,20 +104,25 @@
           </li>
         </ol>
       </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 const route = useRoute()
-const { supabase } = useWorkspace()
+const { supabase, workspaceId } = useWorkspace()
 const customer = ref<any>(null)
 const events = ref<any[]>([])
+const signals = ref<any[]>([])
+const recos = ref<any[]>([])
+const nbaBusy = ref(false)
+const topReco = computed(() => recos.value.find((r: any) => r.status !== 'dismissed'))
 
 const { auth } = useWorkspace()
 const initials = computed(() => ((customer.value?.first_name?.[0] || '') + (customer.value?.last_name?.[0] || '')).toUpperCase() || 'U')
-const brandPrimary = computed(() => auth.workspace?.brand_primary || '#3087B9')
-const brandAccent = computed(() => auth.workspace?.brand_accent || '#0E7490')
+const brandPrimary = computed(() => (auth.displayWorkspace?.brand_primary) || '#3087B9')
+const brandAccent = computed(() => (auth.displayWorkspace?.brand_accent) || '#0E7490')
 const firstSeenLabel = computed(() => {
   const d = customer.value?.created_at
   if (!d) return '—'
@@ -102,8 +146,55 @@ const displayAttrs = computed(() => {
 async function load() {
   const { data } = await supabase.from('customers').select('*').eq('id', route.params.id).maybeSingle()
   customer.value = data
-  const { data: ev } = await supabase.from('events').select('*').eq('customer_id', route.params.id).order('occurred_at', { ascending: false }).limit(50)
+  const [{ data: ev }, { data: sigs }, { data: rcs }] = await Promise.all([
+    supabase.from('events').select('*').eq('customer_id', route.params.id).order('occurred_at', { ascending: false }).limit(50),
+    supabase.from('customer_signals').select('*').eq('customer_id', route.params.id).is('consumed_at', null).order('detected_at', { ascending: false }).limit(10),
+    supabase.from('ai_recommendations').select('*').eq('customer_id', route.params.id).order('created_at', { ascending: false }).limit(5),
+  ])
   events.value = ev || []
+  signals.value = sigs || []
+  recos.value = rcs || []
+}
+
+async function recommendForCustomer() {
+  if (!workspaceId.value || !signals.value.length) {
+    useToast().info('No open signals', 'Run a detection scan from the Intelligence page first.')
+    return
+  }
+  nbaBusy.value = true
+  try {
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-recommend`
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ workspace_id: workspaceId.value, signal_ids: [signals.value[0].id], limit: 1 }),
+    })
+    const json = await res.json()
+    if (!res.ok || !json.ok) throw new Error(json.error || `HTTP ${res.status}`)
+    useToast().success('Suggestion ready')
+    await load()
+  } catch (e: any) {
+    useToast().error('Could not generate', e.message)
+  } finally {
+    nbaBusy.value = false
+  }
+}
+
+function useReco(r: any) {
+  useToast().info('Copied for campaign', 'Open Campaigns to paste this into a new send.')
+  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+    navigator.clipboard.writeText(`${r.headline}\n\n${r.body}\n\nCTA: ${r.cta}`).catch(() => {})
+  }
+}
+
+async function dismissReco(r: any) {
+  await supabase.from('ai_recommendations').update({ status: 'dismissed', dismissed_at: new Date().toISOString() }).eq('id', r.id)
+  recos.value = recos.value.filter(x => x.id !== r.id)
 }
 async function toggleBlacklist() {
   await supabase.from('customers').update({ is_blacklisted: !customer.value.is_blacklisted }).eq('id', customer.value.id)

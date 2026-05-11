@@ -1,18 +1,19 @@
 <template>
   <div>
-    <PageHeader title="Dashboard" subtitle="Your engagement at a glance." :breadcrumb="auth.workspace?.name"/>
+    <PageHeader title="Dashboard" subtitle="Your engagement at a glance." :breadcrumb="displayWs?.name"/>
 
     <div class="p-8 space-y-6">
-      <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-700 via-brand-500 to-brand-900 text-white">
+      <TestModeBanner v-if="isTest"/>
+      <div v-else class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-700 via-brand-500 to-brand-900 text-white">
         <img src="https://images.pexels.com/photos/3184465/pexels-photo-3184465.jpeg?auto=compress&cs=tinysrgb&w=1600" class="absolute inset-0 w-full h-full object-cover opacity-20" alt=""/>
         <div class="absolute -right-20 -top-20 w-[320px] h-[320px] rounded-full bg-accent-500/30 blur-3xl"></div>
         <div class="relative px-6 py-6 md:px-8 md:py-8 flex items-center gap-6 flex-wrap">
           <div class="flex-1 min-w-[260px]">
             <div class="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">{{ greeting }}</div>
-            <h2 class="mt-2 text-2xl md:text-3xl font-bold tracking-tight">{{ auth.workspace?.name || 'Your workspace' }} is live.</h2>
+            <h2 class="mt-2 text-2xl md:text-3xl font-bold tracking-tight">{{ displayWs?.name || 'Your workspace' }} is live.</h2>
             <p class="mt-1 text-sm text-white/80 max-w-xl">Here's how your engagement is tracking today. Dig in, ship a campaign, or shape a journey.</p>
             <div class="mt-4 flex items-center gap-2 flex-wrap">
-              <NuxtLink to="/campaigns" class="inline-flex items-center gap-2 bg-white !text-brand-700 font-semibold text-sm px-4 py-2 rounded-lg hover:bg-ink-50 dark:hover:!bg-ink-50 transition-colors"><Icon name="send" class="w-4 h-4"/>New campaign</NuxtLink>
+              <NuxtLink to="/campaigns" style="background-color:#ffffff;color:#0A445C" class="inline-flex items-center gap-2 font-semibold text-sm px-4 py-2 rounded-lg hover:opacity-90 transition-opacity shadow-sm"><Icon name="send" class="w-4 h-4"/>New campaign</NuxtLink>
               <NuxtLink to="/journeys" class="inline-flex items-center gap-2 bg-white/10 backdrop-blur border border-white/20 text-white font-semibold text-sm px-4 py-2 rounded-lg hover:bg-white/20 transition-colors"><Icon name="route" class="w-4 h-4"/>Build journey</NuxtLink>
             </div>
           </div>
@@ -29,6 +30,8 @@
           </div>
         </div>
       </div>
+
+      <ChannelReadiness :channels="['email','push']" :show-warnings="false"/>
 
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div v-for="s in stats" :key="s.label" class="card p-5">
@@ -172,6 +175,8 @@
 
 <script setup lang="ts">
 const { auth, supabase, workspaceId } = useWorkspace()
+const displayWs = computed<any>(() => auth.displayWorkspace)
+const isTest = computed(() => auth.workspace?.environment === 'test')
 const stats = ref([
   { label: 'Customers', value: 0, hint: 'in your database', icon: 'users', bg: 'bg-brand-100/40 text-brand-500' },
   { label: 'Events (30d)', value: 0, hint: 'total tracked', icon: 'activity', bg: 'bg-accent-500/10 text-accent-500' },
@@ -184,10 +189,8 @@ const recentEvents = ref<any[]>([])
 const topCampaigns = ref<any[]>([])
 const topJourneys = ref<any[]>([])
 const loading = ref(true)
-const liveUsers = computed(() => {
-  const base = Math.max(1, recentEvents.value.length * 3)
-  return (base + 12).toLocaleString()
-})
+const onlineMembers = ref(0)
+const liveUsers = computed(() => onlineMembers.value.toLocaleString())
 const eventStyles = [
   { bg: 'bg-brand-100/40 text-brand-500', icon: 'activity' },
   { bg: 'bg-accent-500/15 text-accent-500', icon: 'send' },
@@ -245,8 +248,22 @@ async function load() {
   chart.value = buckets
   const { data: hv } = await supabase.from('email_domain_health_v').select('*').eq('workspace_id', wid).maybeSingle()
   health.value = hv || { total: 0, verified: 0, spf_pass: 0, dkim_pass: 0, dmarc_pass: 0 }
+  await refreshOnline()
   loading.value = false
 }
+
+async function refreshOnline() {
+  if (!workspaceId.value) return
+  const { data } = await supabase.rpc('workspace_online_customers', {
+    p_workspace_id: workspaceId.value,
+    p_minutes: 10,
+  })
+  onlineMembers.value = Number(data) || 0
+}
+
+let onlineTimer: any = null
+onMounted(() => { onlineTimer = setInterval(refreshOnline, 60_000) })
+onBeforeUnmount(() => { if (onlineTimer) clearInterval(onlineTimer) })
 
 watch(workspaceId, load, { immediate: true })
 </script>

@@ -20,9 +20,9 @@
         </div>
         <div class="relative">
           <button @click="wsOpen = !wsOpen" class="w-full flex items-center gap-2 p-2 rounded-lg border border-ink-100 hover:bg-ink-50 text-left">
-            <div class="w-7 h-7 rounded-md flex items-center justify-center text-white text-xs font-bold shrink-0" :style="{ background: auth.workspace?.brand_primary || '#3087B9' }">{{ (auth.workspace?.name || 'W')[0].toUpperCase() }}</div>
+            <BrandLogo :workspace="displayWs" size="sm"/>
             <div class="flex-1 min-w-0">
-              <div class="text-xs font-semibold text-ink-900 truncate">{{ auth.workspace?.name || 'Workspace' }}</div>
+              <div class="text-xs font-semibold text-ink-900 truncate">{{ displayWs?.name || 'Workspace' }}</div>
               <div class="text-[10px] text-ink-500 truncate">{{ productionWorkspaces.length }} workspace{{ productionWorkspaces.length === 1 ? '' : 's' }}</div>
             </div>
             <Icon name="chevronDown" class="w-3 h-3 text-ink-500"/>
@@ -30,7 +30,7 @@
           <div v-if="wsOpen" class="absolute left-0 right-0 top-full mt-1 bg-white rounded-lg border border-ink-100 shadow-soft z-50 max-h-72 overflow-y-auto">
             <button v-for="w in productionWorkspaces" :key="w.id" @click="pick(w.id)"
               class="w-full flex items-center gap-2 p-2 hover:bg-ink-50 text-left border-b border-ink-100 last:border-0">
-              <div class="w-6 h-6 rounded flex items-center justify-center text-white text-[10px] font-bold" :style="{ background: w.brand_primary || '#3087B9' }">{{ (w.name || 'W')[0].toUpperCase() }}</div>
+              <BrandLogo :workspace="w" size="xs"/>
               <div class="flex-1 min-w-0">
                 <div class="text-xs font-semibold text-ink-900 truncate">{{ w.name }}</div>
                 <div class="text-[10px] text-ink-500">{{ w.owner_id === auth.user?.id ? 'Owner' : 'Member' }}</div>
@@ -63,6 +63,9 @@
         <NuxtLink to="/rfm" class="nav-link" active-class="nav-link-active"><Icon name="trending"/>RFM Analysis</NuxtLink>
         <NuxtLink v-if="auth.workspace?.commerce_enabled" to="/products" class="nav-link" active-class="nav-link-active"><Icon name="box"/>Products</NuxtLink>
 
+        <div class="px-3 pt-4 pb-1 text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Intelligence</div>
+        <NuxtLink to="/intelligence" class="nav-link" active-class="nav-link-active"><Icon name="flask"/>Signals &amp; AI</NuxtLink>
+
         <div class="px-3 pt-4 pb-1 text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Engagement</div>
         <NuxtLink to="/campaigns" class="nav-link" active-class="nav-link-active"><Icon name="send"/>Campaigns</NuxtLink>
         <NuxtLink to="/journeys" class="nav-link" active-class="nav-link-active"><Icon name="route"/>Journeys</NuxtLink>
@@ -92,7 +95,7 @@
           <div class="w-8 h-8 rounded-full bg-brand-900 text-white flex items-center justify-center text-xs font-semibold">{{ initials }}</div>
           <div class="flex-1 min-w-0">
             <div class="text-xs font-semibold text-ink-900 truncate">{{ auth.user?.email }}</div>
-            <div class="text-[10px] text-ink-500 truncate">{{ role.state.roleName || auth.workspace?.name }}</div>
+            <div class="text-[10px] text-ink-500 truncate">{{ role.state.roleName || displayWs?.name }}</div>
           </div>
           <button @click="auth.signOut()" class="text-ink-500 hover:text-ink-900 p-1" title="Sign out">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
@@ -149,6 +152,7 @@ const wsOpen = ref(false)
 const notifOpen = ref(false)
 const notifications = ref<any[]>([])
 const productionWorkspaces = computed(() => auth.workspaces.filter((w: any) => w.environment !== 'test'))
+const displayWs = computed<any>(() => auth.displayWorkspace)
 const unreadCount = computed(() => notifications.value.filter((n: any) => !n.is_read).length)
 
 async function pick(id: string) {

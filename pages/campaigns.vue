@@ -8,6 +8,8 @@
     </PageHeader>
 
     <div class="p-8 space-y-4">
+      <TestModeStrip what="Campaigns" message="Campaigns sent from a test workspace do not deliver real email, SMS, or push. They appear here so you can rehearse content, audiences, and scheduling safely."/>
+      <ChannelReadiness :channels="['email','push','sms']"/>
       <div class="grid grid-cols-4 gap-4">
         <div v-for="s in stats" :key="s.label" class="card p-4">
           <div class="text-xs text-ink-500 font-semibold uppercase tracking-wider">{{ s.label }}</div>
@@ -44,6 +46,7 @@
 
     <Modal v-model="open" :title="editing?.id ? editing.name : 'New campaign'" :subtitle="editing?.id ? `Status: ${editing.status}` : ''" size="lg">
       <form id="cf" @submit.prevent="save" class="space-y-4">
+        <ChannelReadiness :only="(form.channel as any)" :show-warnings="false"/>
         <div class="grid grid-cols-2 gap-3">
           <div><label class="label">Name *</label><input v-model="form.name" class="input" required/></div>
           <div><label class="label">Channel</label>
@@ -71,27 +74,79 @@
           <div v-else class="text-sm text-ink-500 self-end pb-2">Audience preview: <span class="font-semibold text-ink-900">{{ audienceCount }} customers</span></div>
         </div>
         <div v-if="form.channel === 'email'"><label class="label">Subject</label><input v-model="form.subject" class="input"/></div>
-        <div><label class="label">Message content</label><textarea v-model="form.content" rows="6" class="input font-mono text-sm" placeholder="Hi {{first_name}}, ..."></textarea></div>
+        <div><label class="label">Message content</label><textarea v-model="form.content" rows="6" class="input font-mono text-sm" placeholder="Hi {{first_name}}, ..."></textarea>
+          <div class="text-[11px] text-ink-500 mt-1">Liquid vars: <code class="bg-ink-50 px-1 rounded">&#123;&#123;first_name&#125;&#125;</code> <code class="bg-ink-50 px-1 rounded">&#123;&#123;attributes.wallet_balance_ngn&#125;&#125;</code> <code class="bg-ink-50 px-1 rounded">&#123;% if attributes.is_premium %&#125;...&#123;% endif %&#125;</code></div>
+        </div>
 
-        <div v-if="form.channel === 'email'" class="rounded-xl border border-ink-100 bg-ink-50/60 p-4">
+        <div class="rounded-xl border border-ink-100 dark:border-[color:var(--border-subtle)] bg-ink-50/40 dark:bg-[color:var(--surface-muted)] p-4 space-y-3">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <div class="font-semibold text-ink-900 dark:text-[color:var(--text-primary)] text-sm">Live preview</div>
+              <div class="text-[11px] text-ink-500 dark:text-[color:var(--text-tertiary)]">See how template variables render for a real recipient before you send.</div>
+            </div>
+            <select v-model="previewCustomerId" class="input !py-1 !text-xs max-w-[240px]">
+              <option value="">Sample customer</option>
+              <option v-for="c in previewCustomers" :key="c.id" :value="c.id">{{ c.first_name }} {{ c.last_name }} · {{ c.email }}</option>
+            </select>
+          </div>
+          <div class="rounded-xl border border-ink-100 overflow-hidden bg-white">
+            <div v-if="form.channel === 'email'" class="bg-ink-50 p-4 border-b border-ink-100 text-xs">
+              <div><span class="text-ink-500">From:</span> {{ displayWs?.name }}</div>
+              <div class="mt-1"><span class="text-ink-500">Subject:</span> <strong class="text-ink-900">{{ previewSubject || '—' }}</strong></div>
+            </div>
+            <div v-else-if="form.channel === 'push'" class="bg-ink-900 text-white p-4 text-sm flex items-start gap-3">
+              <BrandLogo :workspace="displayWs" size="md"/>
+              <div class="flex-1">
+                <div class="font-semibold text-sm">{{ displayWs?.name || 'App' }}</div>
+                <div class="text-sm opacity-90 mt-0.5 whitespace-pre-wrap">{{ previewContent || 'Write your content above to see it here.' }}</div>
+              </div>
+            </div>
+            <div v-else-if="form.channel === 'sms' || form.channel === 'whatsapp'" class="p-4">
+              <div class="bg-accent-500/10 text-ink-900 text-sm rounded-2xl rounded-bl-sm p-3 max-w-[90%] whitespace-pre-wrap">{{ previewContent || 'Write your content above to see it here.' }}</div>
+              <div class="text-[10px] text-ink-500 mt-1">{{ previewContent.length }} chars · ~{{ Math.ceil((previewContent.length || 1) / 160) }} SMS part(s)</div>
+            </div>
+            <div v-if="form.channel === 'email'" class="p-5">
+              <div class="text-sm text-ink-900 whitespace-pre-wrap leading-relaxed">{{ previewContent || 'Write your content above to see it here.' }}</div>
+            </div>
+          </div>
+          <details class="text-[10px]">
+            <summary class="cursor-pointer text-ink-500 dark:text-[color:var(--text-tertiary)] font-semibold uppercase tracking-wider">Context</summary>
+            <pre class="mt-2 text-[10px] text-ink-700 dark:text-[color:var(--text-secondary)] font-mono overflow-x-auto bg-white dark:bg-[color:var(--surface-base)] rounded-lg p-3 border border-ink-100 dark:border-[color:var(--border-subtle)]">{{ JSON.stringify(previewContext, null, 2) }}</pre>
+          </details>
+        </div>
+
+        <div v-if="form.channel === 'email'" class="rounded-xl border border-ink-100 dark:border-[color:var(--border-subtle)] bg-ink-50/60 dark:bg-[color:var(--surface-muted)] p-4">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <div class="font-semibold text-ink-900 dark:text-[color:var(--text-primary)] text-sm">AMP for Email</div>
+              <div class="text-[11px] text-ink-500 dark:text-[color:var(--text-tertiary)]">Interactive version rendered by Gmail, Yahoo and Mail.ru. Other inboxes fall back to the HTML above.</div>
+            </div>
+            <label class="flex items-center gap-2 text-xs text-ink-700 dark:text-[color:var(--text-secondary)]">
+              <input type="checkbox" v-model="ampEnabled"/> Enable AMP
+            </label>
+          </div>
+          <textarea v-if="ampEnabled" v-model="form.amp_html" rows="6" class="input font-mono text-xs mt-3" placeholder="<!doctype html>&#10;<html amp4email>&#10;  <head>...</head>&#10;  <body>...</body>&#10;</html>"></textarea>
+        </div>
+
+        <div v-if="form.channel === 'email'" class="rounded-xl border border-ink-100 dark:border-[color:var(--border-subtle)] bg-ink-50/60 dark:bg-[color:var(--surface-muted)] p-4">
           <div class="flex items-center justify-between mb-2">
             <div class="flex items-center gap-2">
-              <Icon name="shield" class="w-4 h-4 text-ink-500"/>
-              <div class="font-semibold text-ink-900 text-sm">Deliverability score</div>
+              <Icon name="shield" class="w-4 h-4 text-ink-500 dark:text-[color:var(--text-tertiary)]"/>
+              <div class="font-semibold text-ink-900 dark:text-[color:var(--text-primary)] text-sm">Deliverability score</div>
             </div>
             <div class="flex items-center gap-3">
-              <div class="text-2xl font-bold" :class="scoreColor">{{ lintScore.score }}<span class="text-xs font-medium text-ink-500">/100</span></div>
+              <div class="text-2xl font-bold" :class="scoreColor">{{ lintScore.score }}<span class="text-xs font-medium text-ink-500 dark:text-[color:var(--text-tertiary)]">/100</span></div>
               <span class="chip capitalize" :class="scoreChipClass">{{ lintScore.label }}</span>
             </div>
           </div>
           <div v-if="lintFindings.length" class="space-y-1">
             <div v-for="f in lintFindings" :key="f.code" class="flex items-start gap-2 text-xs">
               <span class="mt-0.5 w-1.5 h-1.5 rounded-full shrink-0" :class="f.severity === 'error' ? 'bg-red-500' : f.severity === 'warn' ? 'bg-amber-500' : 'bg-ink-300'"></span>
-              <span :class="f.severity === 'error' ? 'text-red-700' : f.severity === 'warn' ? 'text-amber-700' : 'text-ink-700'">{{ f.message }}</span>
+              <span :class="f.severity === 'error' ? 'text-red-600 dark:text-red-300' : f.severity === 'warn' ? 'text-amber-700 dark:text-amber-300' : 'text-ink-700 dark:text-[color:var(--text-secondary)]'">{{ f.message }}</span>
             </div>
           </div>
-          <div v-else class="text-xs text-accent-500">No issues detected — looks good to send.</div>
-          <div class="mt-3 pt-3 border-t border-ink-100 flex items-center gap-2">
+          <div v-else class="text-xs text-accent-500 dark:text-accent-300">No issues detected — looks good to send.</div>
+          <div class="mt-3 pt-3 border-t border-ink-100 dark:border-[color:var(--border-subtle)] flex items-center gap-2">
             <input v-model="previewTo" type="email" placeholder="Send preview to (your email)" class="input !py-1.5 !text-xs flex-1"/>
             <button type="button" @click="sendPreview" :disabled="previewing || !previewTo" class="btn-secondary !py-1.5 !text-xs">{{ previewing ? 'Sending…' : 'Send preview to inbox' }}</button>
           </div>
@@ -176,7 +231,7 @@
       <template #footer>
         <button v-if="editing?.id && role.can('campaigns', 'delete')" @click="remove" class="btn-ghost text-red-600"><Icon name="trash"/></button>
         <button @click="open = false" class="btn-secondary">Close</button>
-        <button v-if="(!editing?.id || editing.status === 'draft' || editing.status === 'scheduled') && role.can('campaigns', 'send')" @click="sendNow" :disabled="sending" class="btn-primary"><Icon name="send"/>{{ sending ? 'Sending…' : 'Save & send now' }}</button>
+        <button v-if="(!editing?.id || editing.status === 'draft' || editing.status === 'scheduled') && role.can('campaigns', 'send')" @click="sendNow" :disabled="sending || !channelReady" :title="channelReady ? '' : channelBlockerReason" class="btn-primary"><Icon name="send"/>{{ sending ? 'Sending…' : channelReady ? 'Save & send now' : 'Channel not ready' }}</button>
         <button v-else-if="editing?.id && !role.can('campaigns', 'send')" @click="askApproval" :disabled="requesting" class="btn-primary"><Icon name="shield"/>{{ requesting ? 'Requesting…' : 'Request approval' }}</button>
         <button form="cf" type="submit" class="btn-secondary">Save draft</button>
       </template>
@@ -185,14 +240,19 @@
 </template>
 
 <script setup lang="ts">
-const { supabase, workspaceId } = useWorkspace()
+const { supabase, workspaceId, auth } = useWorkspace()
+const displayWs = computed<any>(() => auth.displayWorkspace)
 const { sendCampaign, resolveAudience } = useEngagement()
 const role = useRole()
 const audit = useAudit()
 const { $supabase } = useNuxtApp()
 const { lintEmail, scoreFromFindings } = useSpamLinter()
+const readiness = useChannelReadiness()
+const toast = useToast()
 const previewTo = ref('')
 const previewing = ref(false)
+const previewCustomers = ref<any[]>([])
+const previewCustomerId = ref('')
 const requesting = ref(false)
 const approvalFlash = ref('')
 async function askApproval() {
@@ -214,11 +274,27 @@ const editing = ref<any>(null)
 const sending = ref(false)
 const recipients = ref<any[]>([])
 const audienceCount = ref(0)
-const form = reactive({
+const form = reactive<any>({
   name: '', channel: 'email', audience_type: 'all', audience_id: '',
   subject: '', content: '', scheduled_at: '',
   holdout_percent: 0, send_time_mode: 'immediate',
   variant_strategy: 'random', winner_metric: 'open_rate',
+  amp_html: '',
+})
+const ampEnabled = ref(false)
+const previewContext = computed(() => {
+  const cust = previewCustomers.value.find((c: any) => c.id === previewCustomerId.value)
+  return sampleContext(cust)
+})
+const previewSubject = computed(() => renderLiquid(form.subject || '', previewContext.value))
+const previewContent = computed(() => renderLiquid(form.content || '', previewContext.value))
+const channelReady = computed(() => {
+  const ch = (form.channel || 'email') as any
+  return readiness.ready(ch)
+})
+const channelBlockerReason = computed(() => {
+  const s = readiness.status((form.channel || 'email') as any)
+  return s?.blockers?.[0]?.reason || ''
 })
 const variants = ref<any[]>([])
 const variantTotalWeight = computed(() => variants.value.reduce((a, v) => a + (Number(v.weight) || 0), 0))
@@ -256,6 +332,7 @@ async function sendPreview() {
         body: form.content || '(empty body)',
         send_email: true,
         stream_override: 'transactional',
+        amp_html: ampEnabled.value ? form.amp_html : '',
       }),
     })
     const json = await res.json().catch(() => ({}))
@@ -284,12 +361,14 @@ const stats = computed(() => {
 
 async function load() {
   if (!workspaceId.value) return
-  const [c, s, l] = await Promise.all([
+  const [c, s, l, pc] = await Promise.all([
     supabase.from('campaigns').select('*').eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }),
     supabase.from('segments').select('id,name').eq('workspace_id', workspaceId.value),
     supabase.from('lists').select('id,name').eq('workspace_id', workspaceId.value),
+    supabase.from('customers').select('id, first_name, last_name, email, phone, city, country, attributes').eq('workspace_id', workspaceId.value).limit(12),
   ])
   campaigns.value = c.data || []; segments.value = s.data || []; lists.value = l.data || []
+  previewCustomers.value = pc.data || []
 }
 async function edit(c: any) {
   editing.value = c
@@ -301,7 +380,9 @@ async function edit(c: any) {
       subject: c.subject, content: c.content, scheduled_at: c.scheduled_at ? c.scheduled_at.slice(0, 16) : '',
       holdout_percent: c.holdout_percent || 0, send_time_mode: c.send_time_mode || 'immediate',
       variant_strategy: c.variant_strategy || 'random', winner_metric: c.winner_metric || 'open_rate',
+      amp_html: c.amp_html || '',
     })
+    ampEnabled.value = !!c.amp_html
     const [msgs, vars] = await Promise.all([
       supabase.from('campaign_messages').select('*, customer:customers(email)').eq('campaign_id', c.id).order('sent_at', { ascending: false }).limit(30),
       supabase.from('campaign_variants').select('*').eq('campaign_id', c.id).order('label'),
@@ -314,7 +395,9 @@ async function edit(c: any) {
       subject: '', content: '', scheduled_at: '',
       holdout_percent: 0, send_time_mode: 'immediate',
       variant_strategy: 'random', winner_metric: 'open_rate',
+      amp_html: '',
     })
+    ampEnabled.value = false
   }
   open.value = true
   refreshAudience()
@@ -335,6 +418,7 @@ async function buildPayload(): Promise<any> {
     send_time_mode: form.send_time_mode,
     variant_strategy: form.variant_strategy,
     winner_metric: form.winner_metric,
+    amp_html: ampEnabled.value ? form.amp_html : '',
     workspace_id: workspaceId.value,
     status: form.scheduled_at ? 'scheduled' : (editing.value?.status || 'draft'),
   }
@@ -373,6 +457,12 @@ async function save() {
   await load()
 }
 async function sendNow() {
+  const ch = (form.channel || 'email') as any
+  const s = readiness.status(ch)
+  if (s && s.blockers.length) {
+    toast.error(`${ch.toUpperCase()} not ready to send`, `${s.blockers[0].reason}. ${s.blockers[0].fix}`)
+    return
+  }
   sending.value = true
   const payload = await buildPayload()
   let camp = editing.value
@@ -403,4 +493,44 @@ async function remove() {
 }
 
 watch(workspaceId, load, { immediate: true })
+
+let realtimeChannel: any = null
+function mergeCampaign(row: any) {
+  const idx = campaigns.value.findIndex((c: any) => c.id === row.id)
+  if (idx === -1) campaigns.value = [row, ...campaigns.value]
+  else campaigns.value.splice(idx, 1, { ...campaigns.value[idx], ...row })
+}
+watch(workspaceId, (ws) => {
+  if (realtimeChannel) { supabase.removeChannel(realtimeChannel); realtimeChannel = null }
+  if (!ws) return
+  realtimeChannel = supabase
+    .channel(`campaigns:${ws}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'campaigns', filter: `workspace_id=eq.${ws}` }, (p: any) => {
+      if (p.eventType === 'DELETE') {
+        campaigns.value = campaigns.value.filter((c: any) => c.id !== p.old?.id)
+      } else if (p.new) {
+        mergeCampaign(p.new)
+      }
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'campaign_messages', filter: `workspace_id=eq.${ws}` }, (p: any) => {
+      const campaignId = p.new?.campaign_id
+      if (!campaignId) return
+      const c = campaigns.value.find((x: any) => x.id === campaignId)
+      if (!c) return
+      if (p.new.status === 'opened' && p.old?.status !== 'opened') c.open_count = (c.open_count || 0) + 1
+      if (p.new.status === 'clicked' && p.old?.status !== 'clicked') c.click_count = (c.click_count || 0) + 1
+    })
+    .subscribe()
+}, { immediate: true })
+onBeforeUnmount(() => {
+  if (realtimeChannel) supabase.removeChannel(realtimeChannel)
+})
+
+const route = useRoute()
+watch([() => campaigns.value.length, () => route.query.id], () => {
+  const id = route.query.id as string | undefined
+  if (!id || open.value) return
+  const c = campaigns.value.find(x => x.id === id)
+  if (c) edit(c)
+}, { immediate: true })
 </script>

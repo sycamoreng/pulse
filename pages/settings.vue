@@ -20,12 +20,19 @@
               <div><label class="label">Name *</label><input v-model="wsForm.name" class="input" required/></div>
               <div><label class="label">Slug *</label><input v-model="wsForm.slug" class="input font-mono" required/></div>
               <div><label class="label">Industry</label>
-                <select v-model="wsForm.industry" class="input">
-                  <option value="">—</option>
-                  <option>Ecommerce</option><option>Fintech</option><option>SaaS</option>
-                  <option>Media</option><option>Healthcare</option><option>Education</option>
-                  <option>Travel</option><option>Gaming</option><option>Other</option>
+                <select v-model="wsForm.industry" @change="onIndustryChange" class="input">
+                  <option value="generic">Generic</option>
+                  <option value="fintech">Fintech</option>
+                  <option value="saas">SaaS</option>
+                  <option value="media">Media &amp; publishing</option>
+                  <option value="commerce">Ecommerce</option>
+                  <option value="healthtech">Healthtech</option>
+                  <option value="edtech">Edtech</option>
+                  <option value="marketplace">Marketplace</option>
+                  <option value="gaming">Gaming</option>
+                  <option value="travel">Travel</option>
                 </select>
+                <div class="text-[11px] text-ink-500 dark:text-[color:var(--text-tertiary)] mt-1">Drives the default behavioural-signal library and AI recommendations.</div>
               </div>
               <div><label class="label">Timezone</label>
                 <select v-model="wsForm.timezone" class="input">
@@ -123,9 +130,9 @@
           <button @click="createWs = true" class="btn-primary"><Icon name="plus"/>New workspace</button>
         </div>
         <div class="space-y-2">
-          <div v-for="w in auth.workspaces" :key="w.id" class="flex items-center justify-between p-3 rounded-lg border border-ink-100 hover:bg-ink-50">
+          <div v-for="w in auth.productionWorkspaceList" :key="w.id" class="flex items-center justify-between p-3 rounded-lg border border-ink-100 hover:bg-ink-50">
             <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold" :style="{ background: w.brand_primary || '#3087B9' }">{{ w.name?.[0]?.toUpperCase() }}</div>
+              <BrandLogo :workspace="w" size="lg"/>
               <div>
                 <div class="font-medium text-ink-900">{{ w.name }}</div>
                 <div class="text-xs text-ink-500 font-mono">{{ w.slug }} · {{ w.owner_id === auth.user?.id ? 'Owner' : 'Member' }}</div>
@@ -213,7 +220,7 @@
                 <td class="table-td text-xs text-ink-500 font-mono">{{ s.reply_to || '—' }}</td>
                 <td class="table-td text-xs text-ink-500">{{ domainFor(s.domain_id) }}</td>
                 <td class="table-td text-right">
-                  <button v-if="!s.verified" @click="sendSenderVerification(s)" class="text-xs text-brand-500 font-semibold mr-3">{{ s.verification_sent_at ? 'Resend' : 'Verify' }}</button>
+                  <button v-if="!s.verified" @click="sendSenderVerification(s)" :disabled="verifyingSenderId === s.id" class="text-xs text-brand-500 font-semibold mr-3 inline-flex items-center gap-1 disabled:opacity-60"><Icon v-if="verifyingSenderId === s.id" name="spinner" class="animate-spin"/>{{ verifyingSenderId === s.id ? 'Sending…' : s.verification_sent_at ? 'Resend' : 'Verify' }}</button>
                   <button v-if="!s.is_default" @click="makeDefault(s)" class="text-xs text-brand-500 font-semibold mr-3">Make default</button>
                   <button @click="removeSender(s)" class="text-ink-300 hover:text-red-600"><Icon name="trash"/></button>
                 </td>
@@ -526,8 +533,16 @@
         <div class="pt-4 mt-4 border-t border-ink-100 space-y-3">
           <button @click="auth.signOut()" class="btn-secondary">Sign out</button>
           <div>
-            <div class="font-semibold text-ink-900 mt-6 mb-1">Danger zone</div>
-            <div class="text-sm text-ink-500 mb-3">Delete all demo data in this workspace.</div>
+            <div class="font-semibold text-ink-900 dark:text-[color:var(--text-primary)] mt-6 mb-1">Demo data</div>
+            <div class="text-sm text-ink-500 dark:text-[color:var(--text-tertiary)] mb-3">Regenerate a realistic cohort of customers with event streams designed to trigger every behavioural signal. Existing demo customers, orphan events, signals and AI recommendations in this workspace are cleared first. Real (non-demo) customers are not touched.</div>
+            <div class="flex items-center gap-2 mb-6">
+              <input v-model.number="demoCount" type="number" min="20" max="500" class="input w-28"/>
+              <button @click="repopulateDemo" :disabled="demoBusy" class="btn-secondary">
+                <Icon name="refresh" class="w-4 h-4" :class="demoBusy ? 'animate-spin' : ''"/>{{ demoBusy ? 'Generating…' : 'Repopulate demo customers' }}
+              </button>
+            </div>
+            <div class="font-semibold text-ink-900 dark:text-[color:var(--text-primary)] mt-6 mb-1">Danger zone</div>
+            <div class="text-sm text-ink-500 dark:text-[color:var(--text-tertiary)] mb-3">Delete all demo data in this workspace.</div>
             <button @click="purge" class="btn-ghost text-red-600"><Icon name="trash"/>Purge workspace data</button>
           </div>
         </div>
@@ -694,9 +709,45 @@ async function onLogoFile(e: Event) {
 }
 
 const wsForm = reactive({
-  name: '', slug: '', industry: '', timezone: 'UTC', website: '',
+  name: '', slug: '', industry: 'generic', timezone: 'UTC', website: '',
   logo_url: '', brand_primary: '#3087B9', brand_accent: '#26C165',
 })
+
+const demoCount = ref(120)
+const demoBusy = ref(false)
+async function repopulateDemo() {
+  if (!workspaceId.value) return
+  const ok = await useConfirm().ask({
+    title: 'Repopulate demo customers?',
+    message: `We'll clear existing demo customers, orphan events, signals and AI recommendations, then generate ${demoCount.value} new customers with realistic event streams. Real customers are preserved.`,
+    tone: 'danger',
+    confirmText: 'Repopulate',
+  })
+  if (!ok) return
+  demoBusy.value = true
+  try {
+    const { data, error } = await supabase.rpc('repopulate_demo_customers', { p_workspace_id: workspaceId.value, p_count: demoCount.value })
+    if (error) throw error
+    if (!data?.ok) throw new Error(data?.error || 'failed')
+    useToast().success('Demo data repopulated', `${data.customers_inserted} customers · ${data.events_inserted} events · cleaned ${data.orphan_events_deleted} orphan events.`)
+    await supabase.rpc('detect_workspace_signals', { p_workspace_id: workspaceId.value })
+  } catch (e: any) {
+    useToast().error('Could not repopulate', e.message || 'Try again.')
+  } finally {
+    demoBusy.value = false
+  }
+}
+
+async function onIndustryChange() {
+  if (!workspaceId.value) return
+  const { data, error } = await supabase.rpc('set_workspace_industry', { p_workspace_id: workspaceId.value, p_industry: wsForm.industry })
+  if (error || !data?.ok) {
+    useToast().error('Could not update industry', error?.message || data?.error || 'Try again.')
+    return
+  }
+  if (auth.workspace) auth.workspace.industry = wsForm.industry
+  useToast().success('Industry updated', 'Signal library refreshed for this industry.')
+}
 
 const roles = ref<any[]>([])
 const members = ref<any[]>([])
@@ -903,7 +954,7 @@ function hydrateForm() {
   if (!w) return
   wsForm.name = w.name || ''
   wsForm.slug = w.slug || ''
-  wsForm.industry = w.industry || ''
+  wsForm.industry = w.industry || 'generic'
   wsForm.timezone = w.timezone || 'UTC'
   wsForm.website = w.website || ''
   wsForm.logo_url = w.logo_url || ''
@@ -1136,11 +1187,18 @@ async function makeDefault(s: any) {
   toast.success('Default sender updated')
   await loadAll()
 }
+const verifyingSenderId = ref<string | null>(null)
 async function sendSenderVerification(s: any) {
-  const res: any = await notify.domainSetup({ action: 'send-verification', sender_id: s.id })
-  if (res?.error) { toast.error('Could not send verification', res.error); return }
-  toast.success('Verification email sent', `Ask ${s.from_email} to click the link in the inbox.`)
-  await loadAll()
+  if (verifyingSenderId.value) return
+  verifyingSenderId.value = s.id
+  try {
+    const res: any = await notify.domainSetup({ action: 'send-verification', sender_id: s.id, site_url: window.location.origin })
+    if (res?.error) { toast.error('Could not send verification', res.error); return }
+    toast.success('Verification email sent', `Ask ${s.from_email} to click the link in the inbox.`)
+    await loadAll()
+  } finally {
+    verifyingSenderId.value = null
+  }
 }
 async function removeSender(s: any) {
   const ok = await confirmDialog.ask({ title: 'Remove this sender?', tone: 'danger', confirmText: 'Remove' })

@@ -6,7 +6,10 @@
       </template>
     </PageHeader>
 
-    <div class="p-8 grid lg:grid-cols-3 gap-6">
+    <div class="p-8 space-y-4">
+      <TestModeStrip what="Events" message="Events shown here are sandboxed. Tracking calls from test SDK keys land in this workspace and will not affect your production analytics."/>
+    </div>
+    <div class="px-8 pb-8 grid lg:grid-cols-3 gap-6">
       <div class="card p-6 lg:col-span-1">
         <div class="font-semibold text-ink-900 mb-4">Defined events</div>
         <div class="space-y-2">
@@ -38,6 +41,7 @@
           </tbody>
         </table>
         <EmptyState v-if="!events.length" icon="activity" title="No events tracked yet" subtitle="Use the dashboard to generate demo data, or connect an SDK."/>
+        <Pagination v-model:page="eventsPage" v-model:pageSize="eventsPageSize" :total="eventsTotal"/>
       </div>
     </div>
 
@@ -63,17 +67,23 @@
 const { supabase, workspaceId } = useWorkspace()
 const defs = ref<any[]>([])
 const events = ref<any[]>([])
+const eventsPage = ref(1)
+const eventsPageSize = ref(50)
+const eventsTotal = ref(0)
 const openNew = ref(false)
 const form = reactive({ name: '', description: '', category: 'custom' })
 
 async function load() {
   if (!workspaceId.value) return
+  const from = (eventsPage.value - 1) * eventsPageSize.value
+  const to = from + eventsPageSize.value - 1
   const [d, e] = await Promise.all([
     supabase.from('event_definitions').select('*').eq('workspace_id', workspaceId.value).order('name'),
-    supabase.from('events').select('*, customer:customers(email)').eq('workspace_id', workspaceId.value).order('occurred_at', { ascending: false }).limit(50),
+    supabase.from('events').select('*, customer:customers(email)', { count: 'exact' }).eq('workspace_id', workspaceId.value).order('occurred_at', { ascending: false }).range(from, to),
   ])
   defs.value = d.data || []
   events.value = e.data || []
+  eventsTotal.value = e.count || 0
 }
 async function saveDef() {
   await supabase.from('event_definitions').insert({ ...form, workspace_id: workspaceId.value })
@@ -88,5 +98,6 @@ async function removeDef(d: any) {
   useToast().success('Event definition removed')
   await load()
 }
-watch(workspaceId, load, { immediate: true })
+watch(eventsPageSize, () => { eventsPage.value = 1 })
+watch([workspaceId, eventsPage, eventsPageSize], load, { immediate: true })
 </script>

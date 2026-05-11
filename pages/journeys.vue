@@ -8,7 +8,10 @@
       </template>
     </PageHeader>
 
-    <div v-if="!editing" class="p-8 grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div v-if="!editing" class="p-8 space-y-4">
+      <TestModeStrip what="Journeys" message="Journeys activated in test mode simulate flows but never deliver real messages to customers. Use this space to validate branches, delays, and triggers before going live."/>
+      <ChannelReadiness :channels="['email','push']"/>
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
       <div v-for="j in journeys" :key="j.id" class="card p-5 hover:shadow-md cursor-pointer" @click="openJourney(j)">
         <div class="flex items-start justify-between mb-3">
           <div class="w-10 h-10 rounded-lg bg-brand-100/40 text-brand-500 flex items-center justify-center"><Icon name="route"/></div>
@@ -26,6 +29,7 @@
       <button @click="openPicker = true" class="card p-5 border-dashed flex flex-col items-center justify-center text-ink-500 hover:text-brand-500 hover:border-brand-500 min-h-[220px]">
         <Icon name="plus"/><div class="mt-2 text-sm font-medium">Create journey</div>
       </button>
+      </div>
     </div>
 
     <div v-else class="fixed inset-0 bg-white z-50 flex flex-col">

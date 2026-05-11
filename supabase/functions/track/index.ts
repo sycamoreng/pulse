@@ -125,6 +125,28 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, customer: data });
     }
 
+    if (path === "alias") {
+      const { external_id, previous_id } = body;
+      if (!external_id || !previous_id) return json({ error: "external_id and previous_id required" }, 400);
+      if (external_id === previous_id) return json({ ok: true, merged: false });
+
+      await supabase.from("customers").upsert(
+        { workspace_id: workspaceId, external_id, last_seen_at: nowIso() },
+        { onConflict: "workspace_id,external_id" },
+      );
+      const [{ data: prior }, { data: target }] = await Promise.all([
+        supabase.from("customers").select("id").eq("workspace_id", workspaceId).eq("external_id", previous_id).maybeSingle(),
+        supabase.from("customers").select("id").eq("workspace_id", workspaceId).eq("external_id", external_id).maybeSingle(),
+      ]);
+      if (prior && target && prior.id !== target.id) {
+        await supabase.from("events").update({ customer_id: target.id }).eq("customer_id", prior.id);
+        await supabase.from("device_tokens").update({ customer_id: target.id }).eq("customer_id", prior.id);
+        await supabase.from("customers").delete().eq("id", prior.id);
+        return json({ ok: true, merged: true });
+      }
+      return json({ ok: true, merged: false });
+    }
+
     if (path === "track" || path === "batch") {
       const events: any[] = path === "batch" ? (body.events || []) : [body];
       if (!Array.isArray(events) || events.length === 0) return json({ error: "no events" }, 400);

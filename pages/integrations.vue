@@ -3,6 +3,7 @@
     <PageHeader title="Integrations" subtitle="Connect your store, stream events to external systems, and schedule exports."/>
 
     <div class="p-8 max-w-5xl space-y-4">
+      <TestModeStrip what="Integrations" message="Webhooks, commerce connectors, and exports do not fire from a test workspace — configure them here, then switch to production to go live."/>
       <div class="flex gap-2 border-b border-ink-100 overflow-x-auto">
         <button v-for="t in tabs" :key="t.id" @click="tab = t.id"
           class="px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition"
@@ -53,6 +54,7 @@
               </tr>
             </tbody>
           </table>
+          <Pagination v-if="orders.length" v-model:page="ordersPage" v-model:pageSize="ordersPageSize" :total="ordersTotal"/>
         </div>
       </div>
 
@@ -143,7 +145,159 @@
           </div>
         </div>
       </div>
-    </div>
+
+      <!-- Ad audiences -->
+      <div v-if="tab === 'audiences'" class="space-y-4">
+        <div class="card p-6">
+          <div class="flex items-center justify-between gap-4">
+            <div class="max-w-xl">
+              <div class="font-semibold text-ink-900 dark:text-[color:var(--text-primary)]">Ad audience destinations</div>
+              <div class="text-xs text-ink-500 dark:text-[color:var(--text-tertiary)] mt-1">Sync lists and segments to Facebook Custom Audiences or Google Customer Match. Emails and phone numbers are SHA-256 hashed before upload. Your API credentials are encrypted at rest and never exposed to the browser after saving.</div>
+            </div>
+            <button @click="newDest" class="btn-primary shrink-0"><Icon name="plus"/>New destination</button>
+          </div>
+        </div>
+
+        <div v-if="!destinations.length" class="card p-8 text-center text-sm text-ink-500 dark:text-[color:var(--text-tertiary)]">No audience destinations connected.</div>
+        <div v-for="d in destinations" :key="d.id" class="card p-4">
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <div class="font-semibold text-ink-900 dark:text-[color:var(--text-primary)] text-sm">{{ d.name || (d.provider === 'facebook' ? 'Facebook Custom Audience' : 'Google Customer Match') }}</div>
+                <span class="chip text-[10px] capitalize" :class="d.provider === 'facebook' ? 'bg-brand-100/40 text-brand-700 dark:text-brand-400' : 'bg-accent-500/10 text-accent-500'">{{ d.provider }}</span>
+                <span class="chip text-[10px]" :class="d.is_active ? 'bg-accent-500/10 text-accent-500' : 'bg-ink-100 dark:bg-[color:var(--surface-muted)] text-ink-700 dark:text-[color:var(--text-secondary)]'">{{ d.is_active ? 'active' : 'paused' }}</span>
+                <span class="chip text-[10px]" :class="d.has_credentials ? 'bg-accent-500/10 text-accent-500' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400'"><Icon name="shield" class="w-3 h-3 mr-0.5 inline"/>{{ d.has_credentials ? 'credentials stored' : 'credentials required' }}</span>
+                <span v-if="d.last_status === 'failed'" class="chip bg-red-100 dark:bg-red-500/15 text-red-600 dark:text-red-400 text-[10px]">last sync failed</span>
+              </div>
+              <div class="text-[11px] text-ink-500 dark:text-[color:var(--text-tertiary)] font-mono truncate mt-1">{{ d.external_audience_id }}<span v-if="d.account_id"> · {{ d.account_id }}</span></div>
+              <div class="text-[11px] text-ink-500 dark:text-[color:var(--text-tertiary)] mt-0.5">
+                <span v-if="d.last_synced_at">Last synced {{ new Date(d.last_synced_at).toLocaleString() }}</span>
+                <span v-else>Not synced yet</span>
+                <span v-if="d.last_error" class="text-red-600 dark:text-red-400"> · {{ d.last_error.slice(0, 120) }}</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap shrink-0">
+              <button @click="openCredentials(d.id, d.provider)" class="btn-ghost !py-1 !text-xs"><Icon name="shield" class="w-3 h-3"/>{{ d.has_credentials ? 'Update credentials' : 'Connect' }}</button>
+              <button @click="syncDest(d)" :disabled="!d.has_credentials" class="btn-ghost !py-1 !text-xs disabled:opacity-40"><Icon name="send" class="w-3 h-3"/>Sync now</button>
+              <button @click="editDest(d)" class="btn-secondary !py-1 !text-xs">Edit</button>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="syncs.length" class="card">
+          <div class="px-5 py-3 border-b border-ink-100 dark:border-[color:var(--border-subtle)] font-semibold text-ink-900 dark:text-[color:var(--text-primary)] text-sm">Recent sync jobs</div>
+          <table class="w-full text-sm">
+            <thead><tr>
+              <th class="table-th">When</th><th class="table-th">Destination</th><th class="table-th">Source</th>
+              <th class="table-th">Status</th><th class="table-th">Matched</th><th class="table-th">Unmatched</th>
+            </tr></thead>
+            <tbody>
+              <tr v-for="s in syncs" :key="s.id">
+                <td class="table-td text-xs">{{ new Date(s.created_at).toLocaleString() }}</td>
+                <td class="table-td text-xs">{{ destMap[s.destination_id]?.name || '—' }}</td>
+                <td class="table-td text-xs capitalize">{{ s.source_type }}</td>
+                <td class="table-td"><span class="chip text-[10px]" :class="syncStatusClass(s.status)">{{ s.status }}</span></td>
+                <td class="table-td text-xs">{{ s.matched_count }}</td>
+                <td class="table-td text-xs">{{ s.unmatched_count }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    <Modal v-model="destOpen" :title="destForm.id ? 'Edit audience destination' : 'New audience destination'">
+      <form id="df" @submit.prevent="saveDest" class="space-y-3">
+        <div><label class="label">Name</label><input v-model="destForm.name" class="input" placeholder="Meta — VIP list"/></div>
+        <div><label class="label">Provider *</label>
+          <select v-model="destForm.provider" class="input" :disabled="!!destForm.id">
+            <option value="facebook">Facebook Custom Audiences</option>
+            <option value="google">Google Customer Match</option>
+          </select>
+        </div>
+        <div><label class="label">{{ destForm.provider === 'facebook' ? 'Audience ID *' : 'User list resource *' }}</label>
+          <input v-model="destForm.external_audience_id" class="input font-mono" required :placeholder="destForm.provider === 'facebook' ? '123456789012345' : 'customers/1234567890/userLists/99999'"/>
+        </div>
+        <div v-if="destForm.provider === 'google'">
+          <label class="label">Google Ads customer ID *</label>
+          <input v-model="destForm.account_id" class="input font-mono" placeholder="1234567890 (no dashes)" required/>
+        </div>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="destForm.is_active"/> Active</label>
+      </form>
+      <template #footer>
+        <button v-if="destForm.id" @click="deleteDest" class="btn-ghost text-red-600 dark:text-red-400 mr-auto">Delete</button>
+        <button @click="destOpen = false" class="btn-secondary">Cancel</button>
+        <button form="df" type="submit" class="btn-primary">Save &amp; continue</button>
+      </template>
+    </Modal>
+
+    <Modal v-model="credsOpen" :title="credsForm.provider === 'facebook' ? 'Connect Facebook credentials' : 'Connect Google Ads credentials'">
+      <form id="cfr" @submit.prevent="saveCredentials" class="space-y-3">
+        <div class="flex items-start gap-2 p-3 rounded-lg bg-brand-100/20 dark:bg-brand-500/10 border border-brand-100 dark:border-brand-500/30">
+          <Icon name="shield" class="w-4 h-4 text-brand-500 mt-0.5"/>
+          <div class="text-[11px] text-ink-700 dark:text-[color:var(--text-secondary)] leading-relaxed">Credentials are encrypted with AES-256-GCM in a private vault. They are only decrypted server-side during a sync and are never sent back to the browser.</div>
+        </div>
+        <div v-if="credsForm.provider === 'facebook'">
+          <label class="label">Marketing API access token *</label>
+          <input v-model="credsForm.fb_token" type="password" class="input font-mono" placeholder="EAAG…" required autocomplete="off"/>
+          <div class="text-[11px] text-ink-500 dark:text-[color:var(--text-tertiary)] mt-1">Generate a long-lived user token with <span class="font-mono">ads_management</span> scope from Meta Business Suite.</div>
+        </div>
+        <template v-else>
+          <div>
+            <label class="label">Developer token *</label>
+            <input v-model="credsForm.gads_developer_token" type="password" class="input font-mono" required autocomplete="off"/>
+            <div class="text-[11px] text-ink-500 dark:text-[color:var(--text-tertiary)] mt-1">From your Google Ads API Center.</div>
+          </div>
+          <div>
+            <label class="label">OAuth access token *</label>
+            <input v-model="credsForm.gads_access_token" type="password" class="input font-mono" required autocomplete="off"/>
+            <div class="text-[11px] text-ink-500 dark:text-[color:var(--text-tertiary)] mt-1">Access token for a refresh-token-backed OAuth client with scope <span class="font-mono">adwords</span>.</div>
+          </div>
+        </template>
+      </form>
+      <template #footer>
+        <button @click="credsOpen = false" class="btn-secondary">Skip for now</button>
+        <button form="cfr" type="submit" :disabled="savingCreds" class="btn-primary inline-flex items-center gap-1"><Icon v-if="savingCreds" name="spinner" class="animate-spin"/>{{ savingCreds ? 'Encrypting…' : 'Store securely' }}</button>
+      </template>
+    </Modal>
+
+    <Modal v-model="syncOpen" title="Sync audience">
+      <form id="syf" @submit.prevent="runSync" class="space-y-3">
+        <div class="text-sm text-ink-700 dark:text-[color:var(--text-secondary)]">Push audience data to <strong>{{ syncTarget?.name || syncTarget?.provider }}</strong>.</div>
+        <div>
+          <label class="label">Source</label>
+          <select v-model="syncForm.source_type" class="input">
+            <option value="all">All customers</option>
+            <option value="list">List</option>
+            <option value="segment">Segment</option>
+          </select>
+        </div>
+        <div v-if="syncForm.source_type === 'list'">
+          <label class="label">List</label>
+          <select v-model="syncForm.source_id" class="input" required>
+            <option value="">—</option>
+            <option v-for="l in lists" :key="l.id" :value="l.id">{{ l.name }}</option>
+          </select>
+        </div>
+        <div v-if="syncForm.source_type === 'segment'">
+          <label class="label">Segment</label>
+          <select v-model="syncForm.source_id" class="input" required>
+            <option value="">—</option>
+            <option v-for="s in segments" :key="s.id" :value="s.id">{{ s.name }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">Operation</label>
+          <select v-model="syncForm.operation" class="input">
+            <option value="add">Add members</option>
+            <option value="remove">Remove members</option>
+          </select>
+        </div>
+      </form>
+      <template #footer>
+        <button @click="syncOpen = false" class="btn-secondary">Cancel</button>
+        <button form="syf" type="submit" class="btn-primary" :disabled="syncing">{{ syncing ? 'Running…' : 'Run sync' }}</button>
+      </template>
+    </Modal>
 
     <Modal v-model="hookOpen" :title="hookForm.id ? 'Edit webhook' : 'New webhook destination'" size="lg">
       <form id="hkf" @submit.prevent="saveHook" class="space-y-3">
@@ -248,6 +402,7 @@
         <button form="sf" type="submit" class="btn-primary">Save</button>
       </template>
     </Modal>
+    </div>
   </div>
 </template>
 
@@ -263,6 +418,7 @@ const tabs = computed(() => {
     { id: 'webhooks', label: 'Outbound webhooks', icon: 'send' },
     { id: 'keys', label: 'API keys', icon: 'shield' },
     { id: 'exports', label: 'Scheduled exports', icon: 'upload' },
+    { id: 'audiences', label: 'Ad audiences', icon: 'users' },
   )
   return base
 })
@@ -270,6 +426,9 @@ const tab = ref(commerceEnabled.value ? 'commerce' : 'webhooks')
 watch(commerceEnabled, (on) => { if (!on && tab.value === 'commerce') tab.value = 'webhooks' })
 
 const orders = ref<any[]>([])
+const ordersPage = ref(1)
+const ordersPageSize = ref(25)
+const ordersTotal = ref(0)
 const hooks = ref<any[]>([])
 const keys = ref<any[]>([])
 const schedules = ref<any[]>([])
@@ -288,6 +447,27 @@ const allScopes = ['track:write', 'track:read', 'customers:read', 'customers:wri
 
 const schedOpen = ref(false)
 const schedForm = reactive<any>({ id: '', name: '', scope: 'customers', format: 'csv', destination: 'download', destination_config: {}, cron: '0 5 * * *', is_active: true })
+
+const destinations = ref<any[]>([])
+const syncs = ref<any[]>([])
+const lists = ref<any[]>([])
+const segments = ref<any[]>([])
+const destOpen = ref(false)
+const destForm = reactive<any>({ id: '', name: '', provider: 'facebook', external_audience_id: '', account_id: '', is_active: true })
+const credsOpen = ref(false)
+const credsForm = reactive<any>({ destination_id: '', provider: 'facebook', fb_token: '', gads_developer_token: '', gads_access_token: '' })
+const savingCreds = ref(false)
+const syncOpen = ref(false)
+const syncTarget = ref<any>(null)
+const syncForm = reactive<any>({ source_type: 'all', source_id: '', operation: 'add' })
+const syncing = ref(false)
+const destMap = computed(() => Object.fromEntries(destinations.value.map((d: any) => [d.id, d])))
+function syncStatusClass(s: string) {
+  if (s === 'completed') return 'bg-accent-500/10 text-accent-500'
+  if (s === 'failed') return 'bg-red-100 dark:bg-red-500/15 text-red-600 dark:text-red-400'
+  if (s === 'running') return 'bg-yellow-100 dark:bg-yellow-500/15 text-yellow-700 dark:text-yellow-400'
+  return 'bg-ink-100 dark:bg-[color:var(--surface-muted)] text-ink-700 dark:text-[color:var(--text-secondary)]'
+}
 const schedConfigText = computed({
   get: () => JSON.stringify(schedForm.destination_config || {}, null, 2),
   set: (v: string) => { try { schedForm.destination_config = JSON.parse(v || '{}') } catch {} },
@@ -314,16 +494,132 @@ async function sha256(v: string) {
 
 async function load() {
   if (!workspaceId.value) return
-  const [o, h, k, s] = await Promise.all([
-    supabase.from('commerce_orders').select('*').eq('workspace_id', workspaceId.value).order('occurred_at', { ascending: false }).limit(20),
+  const ordersFrom = (ordersPage.value - 1) * ordersPageSize.value
+  const ordersTo = ordersFrom + ordersPageSize.value - 1
+  const [o, h, k, s, d, sy, ls, sg] = await Promise.all([
+    supabase.from('commerce_orders').select('*', { count: 'exact' }).eq('workspace_id', workspaceId.value).order('occurred_at', { ascending: false }).range(ordersFrom, ordersTo),
     supabase.from('webhook_destinations').select('*').eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }),
     supabase.from('api_keys').select('*').eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }),
     supabase.from('data_exports_scheduled').select('*').eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }),
+    supabase.from('ad_audience_destinations').select('*').eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }),
+    supabase.from('ad_audience_syncs').select('*').eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }).limit(20),
+    supabase.from('lists').select('id, name').eq('workspace_id', workspaceId.value).order('name'),
+    supabase.from('segments').select('id, name').eq('workspace_id', workspaceId.value).order('name'),
   ])
   orders.value = o.data || []
+  ordersTotal.value = o.count || 0
   hooks.value = h.data || []
   keys.value = k.data || []
   schedules.value = s.data || []
+  destinations.value = d.data || []
+  syncs.value = sy.data || []
+  lists.value = ls.data || []
+  segments.value = sg.data || []
+}
+
+function newDest() {
+  Object.assign(destForm, { id: '', name: '', provider: 'facebook', external_audience_id: '', account_id: '', is_active: true })
+  destOpen.value = true
+}
+function editDest(d: any) {
+  Object.assign(destForm, {
+    id: d.id, name: d.name, provider: d.provider, external_audience_id: d.external_audience_id || '',
+    account_id: d.account_id || '', is_active: d.is_active,
+  })
+  destOpen.value = true
+}
+function openCredentials(destinationId: string, provider: string) {
+  Object.assign(credsForm, { destination_id: destinationId, provider, fb_token: '', gads_developer_token: '', gads_access_token: '' })
+  credsOpen.value = true
+}
+async function saveDest() {
+  const payload = {
+    workspace_id: workspaceId.value, name: destForm.name, provider: destForm.provider,
+    external_audience_id: destForm.external_audience_id, account_id: destForm.account_id,
+    is_active: destForm.is_active,
+    created_by: auth.user?.id || null,
+  }
+  let savedId = destForm.id
+  if (destForm.id) {
+    const { error } = await supabase.from('ad_audience_destinations').update(payload).eq('id', destForm.id)
+    if (error) { useToast().error('Save failed', error.message); return }
+  } else {
+    const { data, error } = await supabase.from('ad_audience_destinations').insert(payload).select().maybeSingle()
+    if (error) { useToast().error('Save failed', error.message); return }
+    savedId = data?.id
+  }
+  destOpen.value = false
+  await load()
+  useToast().success('Destination saved')
+  const dest = destinations.value.find(x => x.id === savedId)
+  if (savedId && (!dest?.has_credentials)) openCredentials(savedId, destForm.provider)
+}
+async function saveCredentials() {
+  if (!credsForm.destination_id) return
+  const credentials = credsForm.provider === 'facebook'
+    ? { access_token: (credsForm.fb_token || '').trim() }
+    : { developer_token: (credsForm.gads_developer_token || '').trim(), access_token: (credsForm.gads_access_token || '').trim() }
+  if (credsForm.provider === 'facebook' && !credentials.access_token) { useToast().error('Access token is required'); return }
+  if (credsForm.provider === 'google' && (!(credentials as any).developer_token || !(credentials as any).access_token)) {
+    useToast().error('Both tokens are required'); return
+  }
+  savingCreds.value = true
+  try {
+    const { data: { session } } = await $supabase.auth.getSession()
+    const res = await fetch(`${useRuntimeConfig().public.supabaseUrl}/functions/v1/audience-connect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ destination_id: credsForm.destination_id, workspace_id: workspaceId.value, credentials }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (json?.ok) {
+      useToast().success('Credentials stored securely')
+      credsForm.fb_token = ''; credsForm.gads_access_token = ''; credsForm.gads_developer_token = ''
+      credsOpen.value = false
+      await load()
+    } else {
+      useToast().error('Could not store credentials', json?.error || 'Unknown error')
+    }
+  } finally {
+    savingCreds.value = false
+  }
+}
+async function deleteDest() {
+  const ok = await useConfirm().ask({ title: 'Delete destination?', tone: 'danger', confirmText: 'Delete' })
+  if (!ok) return
+  await supabase.from('ad_audience_destinations').delete().eq('id', destForm.id)
+  destOpen.value = false; await load()
+}
+function syncDest(d: any) {
+  syncTarget.value = d
+  Object.assign(syncForm, { source_type: 'all', source_id: '', operation: 'add' })
+  syncOpen.value = true
+}
+async function runSync() {
+  if (!syncTarget.value) return
+  if (syncForm.source_type !== 'all' && !syncForm.source_id) { useToast().error('Pick a source list or segment'); return }
+  syncing.value = true
+  try {
+    const { data: { session } } = await $supabase.auth.getSession()
+    const res = await fetch(`${useRuntimeConfig().public.supabaseUrl}/functions/v1/audience-sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+      body: JSON.stringify({
+        workspace_id: workspaceId.value,
+        destination_id: syncTarget.value.id,
+        source_type: syncForm.source_type,
+        source_id: syncForm.source_id || null,
+        operation: syncForm.operation,
+      }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (json?.ok) useToast().success('Sync complete', `${json.matched} matched / ${json.unmatched} unmatched`)
+    else useToast().error('Sync failed', json?.error || 'Unknown error')
+  } finally {
+    syncing.value = false
+    syncOpen.value = false
+    await load()
+  }
 }
 
 function newHook() {
@@ -426,5 +722,6 @@ async function deleteSchedule() {
   schedOpen.value = false; await load()
 }
 
-watch(workspaceId, load, { immediate: true })
+watch(ordersPageSize, () => { ordersPage.value = 1 })
+watch([workspaceId, ordersPage, ordersPageSize], load, { immediate: true })
 </script>

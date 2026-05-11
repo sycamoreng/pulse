@@ -7,6 +7,7 @@
     </PageHeader>
 
     <div class="p-8 space-y-4">
+      <TestModeStrip what="Templates" message="Templates live inside this test workspace only. Duplicate them to production when you're ready to send for real."/>
       <div class="flex gap-2 flex-wrap">
         <button @click="filter = ''" class="chip" :class="filter === '' ? 'bg-brand-500 text-white' : 'bg-white border border-ink-100 text-ink-700'">All ({{ templates.length }})</button>
         <button v-for="ch in channels" :key="ch" @click="filter = ch" class="chip capitalize" :class="filter === ch ? 'bg-brand-500 text-white' : 'bg-white border border-ink-100 text-ink-700'">{{ ch }}</button>
@@ -82,14 +83,14 @@
           </div>
           <div class="rounded-xl border border-ink-100 overflow-hidden bg-white">
             <div v-if="form.channel === 'email'" class="bg-ink-50 p-4 border-b border-ink-100 text-xs">
-              <div><span class="text-ink-500">From:</span> {{ auth.workspace?.name }}</div>
+              <div><span class="text-ink-500">From:</span> {{ displayWs?.name }}</div>
               <div class="mt-1"><span class="text-ink-500">Subject:</span> <strong>{{ previewSubject || '—' }}</strong></div>
               <div v-if="form.preview_text" class="mt-1 text-ink-500">{{ renderedPreviewText }}</div>
             </div>
             <div v-else-if="form.channel === 'push' || form.channel === 'inapp'" class="bg-ink-900 text-white p-4 text-sm flex items-start gap-3">
-              <div class="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold" :style="{ background: auth.workspace?.brand_primary || '#3087B9' }">{{ (auth.workspace?.name || 'S')[0].toUpperCase() }}</div>
+              <BrandLogo :workspace="displayWs" size="md"/>
               <div class="flex-1">
-                <div class="font-semibold text-sm">{{ auth.workspace?.name || 'App' }}</div>
+                <div class="font-semibold text-sm">{{ displayWs?.name || 'App' }}</div>
                 <div class="text-sm opacity-90 mt-0.5 whitespace-pre-wrap">{{ previewContent }}</div>
               </div>
             </div>
@@ -118,6 +119,7 @@
 
 <script setup lang="ts">
 const { supabase, workspaceId, auth } = useWorkspace()
+const displayWs = computed<any>(() => auth.displayWorkspace)
 const templates = ref<any[]>([])
 const previewCustomers = ref<any[]>([])
 const previewCustomerId = ref('')

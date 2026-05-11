@@ -6,7 +6,8 @@
       </template>
     </PageHeader>
 
-    <div class="p-8 grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="p-8 pb-0"><TestModeStrip what="On-site messages" message="On-site messages published in test mode render only for visitors using a test SDK key. Live website visitors are unaffected."/></div>
+    <div class="px-8 pb-8 pt-4 grid md:grid-cols-2 lg:grid-cols-3 gap-4">
       <div v-for="m in messages" :key="m.id" class="card overflow-hidden hover:shadow-md cursor-pointer" @click="edit(m)">
         <div class="bg-gradient-to-br from-brand-700 to-brand-500 h-32 p-4 flex items-center justify-center relative">
           <div class="bg-white rounded-lg shadow-xl p-3 max-w-[80%]">

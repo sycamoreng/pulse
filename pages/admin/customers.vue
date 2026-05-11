@@ -12,7 +12,7 @@
             <tr><th class="px-4 py-3">Workspace</th><th class="px-4 py-3">Plan</th><th class="px-4 py-3">Email used</th><th class="px-4 py-3">Created</th><th></th></tr>
           </thead>
           <tbody>
-            <tr v-for="w in filtered" :key="w.id" class="border-b border-ink-100 last:border-0 hover:bg-ink-50">
+            <tr v-for="w in paged" :key="w.id" class="border-b border-ink-100 last:border-0 hover:bg-ink-50">
               <td class="px-4 py-3">
                 <div class="font-semibold text-ink-900">{{ w.name }}</div>
                 <div class="text-xs text-ink-500">{{ w.slug }} · {{ w.industry || '—' }}</div>
@@ -24,6 +24,7 @@
             </tr>
           </tbody>
         </table>
+        <Pagination v-model:page="page" v-model:pageSize="pageSize" :total="filtered.length"/>
       </div>
     </div>
 
@@ -82,6 +83,13 @@ const filtered = computed(() => {
     return matchesQ && matchesPlan
   })
 })
+const page = ref(1)
+const pageSize = ref(50)
+const paged = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filtered.value.slice(start, start + pageSize.value)
+})
+watch([q, planFilter, pageSize], () => { page.value = 1 })
 function edit(w: any) {
   editing.value = w
   Object.assign(form, { plan_id: w.plan_id, email_quota_override: w.email_quota_override, sms_quota_override: w.sms_quota_override })

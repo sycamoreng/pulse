@@ -4,7 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, X-Verify-Token",
 };
 const json = (d: unknown, s = 200) => new Response(JSON.stringify(d), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
@@ -33,7 +33,7 @@ async function generateDkimKeypair() {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
   try {
-    const { action, domain_id, sender_id, workspace_id, domain } = await req.json().catch(() => ({}));
+    const { action, domain_id, sender_id, workspace_id, domain, site_url } = await req.json().catch(() => ({}));
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     const spfInclude = Deno.env.get("PULSE_SPF_INCLUDE") || "";
@@ -74,8 +74,11 @@ Deno.serve(async (req: Request) => {
       await supabase.from("email_senders").update({
         verification_token: token, verification_sent_at: new Date().toISOString(), verified: false, verified_at: null,
       }).eq("id", sender_id);
-      const siteUrl = Deno.env.get("PULSE_SITE_URL") || "";
+      const siteUrl = (site_url && String(site_url).startsWith("http") ? String(site_url) : Deno.env.get("PULSE_SITE_URL") || "").replace(/\/$/, "");
       const link = `${siteUrl}/settings?verify_sender=${sender_id}&token=${token}`;
+      const platformFromEmail = Deno.env.get("PULSE_DEFAULT_FROM_EMAIL") || "";
+      const platformFromName = Deno.env.get("PULSE_DEFAULT_FROM_NAME") || "Pulse";
+      const platformFrom = platformFromEmail ? `${platformFromName} <${platformFromEmail}>` : "";
       const notifyRes = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/notify`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
@@ -86,6 +89,7 @@ Deno.serve(async (req: Request) => {
           title: "Verify your sender address",
           body: `Confirm that you own ${sender.from_email} by opening the verification link below. If you didn't request this, you can ignore this email.`,
           link, send_email: true,
+          from_override: platformFrom,
         }),
       });
       const n = await notifyRes.json().catch(() => ({}));

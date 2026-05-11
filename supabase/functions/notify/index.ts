@@ -17,11 +17,15 @@ interface NotifyPayload {
   link?: string;
   send_email?: boolean;
   stream_override?: "bulk" | "transactional";
+  html_override?: string;
+  amp_html?: string;
+  from_override?: string;
 }
 
 const TRANSACTIONAL_KINDS = new Set([
   "invite", "approval_approved", "approval_rejected",
   "export_ready", "password_reset", "otp", "receipt",
+  "sender_verification", "domain_verified", "sender_verified",
 ]);
 
 function renderEmail(title: string, body: string, link?: string, brand = "#3087B9") {
@@ -38,21 +42,26 @@ function renderEmail(title: string, body: string, link?: string, brand = "#3087B
   </body></html>`;
 }
 
-async function sendViaResend(apiKey: string, from: string, to: string, subject: string, html: string) {
+async function sendViaResend(apiKey: string, from: string, to: string, subject: string, html: string, amp?: string) {
+  const body: any = { from, to, subject, html };
+  // Resend doesn't have first-class AMP yet; include as alternative header-like field for providers that forward it.
+  if (amp) body.amp = amp;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to, subject, html }),
+    body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, id: data?.id || "", error: res.ok ? "" : JSON.stringify(data) };
 }
 
-async function sendViaPostmark(token: string, from: string, to: string, subject: string, html: string, stream: string) {
+async function sendViaPostmark(token: string, from: string, to: string, subject: string, html: string, stream: string, amp?: string) {
+  const payload: any = { From: from, To: to, Subject: subject, HtmlBody: html, MessageStream: stream || "outbound" };
+  if (amp) payload.Headers = [{ Name: "Content-Type", Value: "text/x-amp-html" }, ...(payload.Headers || [])];
   const res = await fetch("https://api.postmarkapp.com/email", {
     method: "POST",
     headers: { "X-Postmark-Server-Token": token, "Accept": "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({ From: from, To: to, Subject: subject, HtmlBody: html, MessageStream: stream || "outbound" }),
+    body: JSON.stringify(payload),
   });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, id: data?.MessageID || "", error: res.ok ? "" : JSON.stringify(data) };
@@ -238,13 +247,18 @@ Deno.serve(async (req: Request) => {
 
       const platformFromEmail = Deno.env.get("PULSE_DEFAULT_FROM_EMAIL") || "";
       const platformFromName = Deno.env.get("PULSE_DEFAULT_FROM_NAME") || "Pulse";
-      const from = sender?.from_email
-        ? `${sender.from_name || ws?.name || "Pulse"} <${sender.from_email}>`
-        : platformFromEmail
-          ? `${platformFromName} <${platformFromEmail}>`
-          : "";
+      const from = payload.from_override && payload.from_override.trim().length
+        ? payload.from_override.trim()
+        : sender?.from_email
+          ? `${sender.from_name || ws?.name || "Pulse"} <${sender.from_email}>`
+          : platformFromEmail
+            ? `${platformFromName} <${platformFromEmail}>`
+            : "";
       const subject = payload.title;
-      const html = renderEmail(payload.title, payload.body || "", payload.link, brand);
+      const html = payload.html_override && payload.html_override.trim().length
+        ? payload.html_override
+        : renderEmail(payload.title, payload.body || "", payload.link, brand);
+      const ampHtml = payload.amp_html && payload.amp_html.trim().length ? payload.amp_html : "";
 
       let status = "queued";
       let provider_message_id = "";
@@ -284,14 +298,14 @@ Deno.serve(async (req: Request) => {
           const token = Deno.env.get(secretName || "POSTMARK_SERVER_TOKEN") || "";
           if (!token) { status = "failed"; errorText = `Postmark token missing (secret: ${secretName})`; }
           else {
-            const r = await sendViaPostmark(token, from, payload.to_email, subject, html, provider.config?.message_stream || "outbound");
+            const r = await sendViaPostmark(token, from, payload.to_email, subject, html, provider.config?.message_stream || "outbound", ampHtml);
             status = r.ok ? "sent" : "failed"; provider_message_id = r.id; errorText = r.error;
           }
         } else if (provider.provider === "resend") {
           const apiKey = Deno.env.get(secretName || "RESEND_API_KEY") || "";
           if (!apiKey) { status = "failed"; errorText = `Resend key missing (secret: ${secretName})`; }
           else {
-            const r = await sendViaResend(apiKey, from, payload.to_email, subject, html);
+            const r = await sendViaResend(apiKey, from, payload.to_email, subject, html, ampHtml);
             status = r.ok ? "sent" : "failed"; provider_message_id = r.id; errorText = r.error;
           }
         } else {

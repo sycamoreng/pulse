@@ -70,6 +70,7 @@
         <EmptyState v-if="!loading && !customers.length" icon="users" title="No customers yet" subtitle="Add your first customer or import a CSV file to get started.">
           <button @click="openNew = true" class="btn-primary"><Icon name="plus"/>Add customer</button>
         </EmptyState>
+        <Pagination v-model:page="page" v-model:pageSize="pageSize" :total="total"/>
       </div>
     </div>
 
@@ -108,12 +109,16 @@ const blacklistFilter = ref('')
 const loading = ref(true)
 const openNew = ref(false)
 const saving = ref(false)
+const page = ref(1)
+const pageSize = ref(50)
 const form = reactive({ external_id: '', email: '', first_name: '', last_name: '', phone: '', platform: 'web', city: '', country: '' })
 
 async function load() {
   if (!workspaceId.value) return
   loading.value = true
-  let query = supabase.from('customers').select('*', { count: 'exact' }).eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }).limit(100)
+  const from = (page.value - 1) * pageSize.value
+  const to = from + pageSize.value - 1
+  let query = supabase.from('customers').select('*', { count: 'exact' }).eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }).range(from, to)
   if (q.value) query = query.or(`email.ilike.%${q.value}%,first_name.ilike.%${q.value}%,last_name.ilike.%${q.value}%,external_id.ilike.%${q.value}%`)
   if (platformFilter.value) query = query.eq('platform', platformFilter.value)
   if (blacklistFilter.value === 'yes') query = query.eq('is_blacklisted', true)
@@ -133,5 +138,6 @@ async function createCustomer() {
   await load()
 }
 
-watch([workspaceId, q, platformFilter, blacklistFilter], load, { immediate: true })
+watch([q, platformFilter, blacklistFilter, pageSize], () => { page.value = 1 })
+watch([workspaceId, q, platformFilter, blacklistFilter, page, pageSize], load, { immediate: true })
 </script>

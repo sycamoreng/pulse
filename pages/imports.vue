@@ -11,6 +11,7 @@
     </PageHeader>
 
     <div class="p-8 space-y-6">
+      <TestModeStrip what="Imports" message="Imported rows only populate this test workspace. Use this to preview mappings without touching production customer data."/>
       <div v-if="parseError" class="card p-4 border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-900/50 text-red-700 dark:text-red-300 text-sm flex items-start gap-3">
         <Icon name="alert"/>
         <div>
@@ -151,6 +152,7 @@
           </tbody>
         </table>
         <EmptyState v-else icon="upload" title="No imports yet" subtitle="Upload a CSV to add customers. We'll auto-detect columns and show you exactly what happened."/>
+        <Pagination v-if="imports.length" v-model:page="importsPage" v-model:pageSize="importsPageSize" :total="importsTotal"/>
       </div>
     </div>
   </div>
@@ -171,6 +173,9 @@ type ImportError = { row: number; message: string }
 
 const attrs = ref<any[]>([])
 const imports = ref<any[]>([])
+const importsPage = ref(1)
+const importsPageSize = ref(25)
+const importsTotal = ref(0)
 const parsed = ref<ParsedCsv | null>(null)
 const parseError = ref('')
 const mapping = reactive<Record<string, string>>({})
@@ -187,10 +192,14 @@ async function load() {
   if (!workspaceId.value) return
   const { data: a } = await supabase.from('customer_attributes_schema').select('*').eq('workspace_id', workspaceId.value).order('label')
   attrs.value = a || []
-  const { data: im } = await supabase.from('imports').select('*').eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }).limit(25)
+  const fromIdx = (importsPage.value - 1) * importsPageSize.value
+  const toIdx = fromIdx + importsPageSize.value - 1
+  const { data: im, count: imCount } = await supabase.from('imports').select('*', { count: 'exact' }).eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }).range(fromIdx, toIdx)
   imports.value = im || []
+  importsTotal.value = imCount || 0
 }
-watch(workspaceId, load, { immediate: true })
+watch(importsPageSize, () => { importsPage.value = 1 })
+watch([workspaceId, importsPage, importsPageSize], load, { immediate: true })
 
 function reset() {
   parsed.value = null

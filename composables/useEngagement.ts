@@ -185,6 +185,49 @@ export const useEngagement = () => {
     })
     if (records.length) await $supabase.from('campaign_messages').insert(records)
 
+    // Enqueue real delivery alongside the in-app message rows. The queue-worker
+    // edge function will flush these, calling notify/push-dispatch/etc. with
+    // retry + backoff. Test-mode workspaces skip the queue — they should look
+    // like a send happened but never talk to a provider.
+    try {
+      const { data: ws } = await $supabase.from('workspaces').select('environment').eq('id', campaign.workspace_id).maybeSingle()
+      const isTest = ws?.environment === 'test'
+      if (!isTest && records.length) {
+        const { data: customers } = await $supabase.from('customers').select('id, email').eq('workspace_id', campaign.workspace_id).in('id', records.map((r: any) => r.customer_id))
+        const emailById = new Map<string, string>((customers || []).map((c: any) => [c.id, c.email]))
+        const queueRows = records
+          .filter((r: any) => r.status === 'sent' || r.status === 'scheduled')
+          .map((r: any) => {
+            const variantContent = variantList.find((v: any) => v.label === r.variant_label)
+            const subject = variantContent?.subject || campaign.subject
+            const content = variantContent?.content || campaign.content
+            const toEmail = emailById.get(r.customer_id)
+            return {
+              workspace_id: campaign.workspace_id,
+              channel: campaign.channel,
+              campaign_id: campaign.id,
+              customer_id: r.customer_id,
+              status: 'queued',
+              next_attempt_at: r.scheduled_at || new Date().toISOString(),
+              payload: {
+                kind: 'campaign',
+                title: subject,
+                body: content,
+                amp_html: campaign.amp_html || '',
+                to_email: toEmail,
+                to_user_id: r.customer_id,
+              },
+            }
+          })
+          .filter((q: any) => q.channel !== 'email' || q.payload.to_email)
+        if (queueRows.length) await $supabase.from('delivery_queue').insert(queueRows)
+      }
+    } catch (e) {
+      // Queue failures must not break the campaign send flow — the in-app
+      // message rows are the source of truth for the UI.
+      console.warn('[useEngagement] delivery_queue enqueue failed', e)
+    }
+
     // Simulate engagement only on messages actually "sent" right now
     const immediateIds = records.filter((r: any) => r.status === 'sent').map((r: any) => r.customer_id)
     const openCount = Math.floor(immediateIds.length * (0.25 + Math.random() * 0.35))

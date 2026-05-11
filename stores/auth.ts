@@ -1,6 +1,16 @@
 import { defineStore } from 'pinia'
 
 const LS_KEY = 'pulse.activeWorkspaceId'
+const LS_ENV_KEY = 'pulse.envPreference'
+
+function readEnvPref(): 'production' | 'test' {
+  if (typeof window === 'undefined') return 'production'
+  const v = localStorage.getItem(LS_ENV_KEY)
+  return v === 'test' ? 'test' : 'production'
+}
+function writeEnvPref(env: 'production' | 'test') {
+  if (typeof window !== 'undefined') localStorage.setItem(LS_ENV_KEY, env)
+}
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -10,6 +20,25 @@ export const useAuthStore = defineStore('auth', {
     loading: true,
     initialized: false,
   }),
+  getters: {
+    displayWorkspace(state): any {
+      const ws = state.workspace
+      if (!ws) return null
+      if (ws.environment !== 'test' || !ws.parent_workspace_id) return ws
+      const parent = state.workspaces.find((w: any) => w.id === ws.parent_workspace_id)
+      if (!parent) return { ...ws, name: ws.name.replace(/\s*\(Test\)\s*$/, '') }
+      return {
+        ...parent,
+        id: ws.id,
+        environment: 'test',
+        parent_workspace_id: parent.id,
+        demo_seeded: ws.demo_seeded,
+      }
+    },
+    productionWorkspaceList(state): any[] {
+      return state.workspaces.filter((w: any) => w.environment !== 'test')
+    },
+  },
   actions: {
     async init() {
       if (this.initialized) return
@@ -55,7 +84,18 @@ export const useAuthStore = defineStore('auth', {
         return
       }
       const savedId = typeof window !== 'undefined' ? localStorage.getItem(LS_KEY) : null
-      const active = unique.find((w: any) => w.id === savedId) || unique[0]
+      const envPref = readEnvPref()
+      let active = unique.find((w: any) => w.id === savedId) || unique[0]
+      if (active) {
+        const parentId = active.environment === 'test' ? active.parent_workspace_id : active.id
+        if (envPref === 'test') {
+          const testSibling = unique.find((w: any) => w.environment === 'test' && w.parent_workspace_id === parentId)
+          if (testSibling) active = testSibling
+        } else {
+          const prodSibling = unique.find((w: any) => w.environment !== 'test' && w.id === parentId) || unique.find((w: any) => w.environment !== 'test')
+          if (prodSibling) active = prodSibling
+        }
+      }
       await this.setActiveWorkspace(active.id)
     },
     async setActiveWorkspace(id: string) {
@@ -63,6 +103,7 @@ export const useAuthStore = defineStore('auth', {
       if (!ws) return
       this.workspace = ws
       if (typeof window !== 'undefined') localStorage.setItem(LS_KEY, id)
+      writeEnvPref(ws.environment === 'test' ? 'test' : 'production')
       if (ws.owner_id === this.user?.id && !ws.demo_seeded) {
         this.seedInBackground(ws.id)
       }

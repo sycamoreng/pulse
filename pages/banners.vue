@@ -6,7 +6,8 @@
       </template>
     </PageHeader>
 
-    <div class="p-8 grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="p-8 pb-0"><TestModeStrip what="In-app banners" message="Banners activated in test mode are only delivered to devices using a test SDK key."/></div>
+    <div class="px-8 pb-8 pt-4 grid md:grid-cols-2 lg:grid-cols-3 gap-4">
       <div v-for="b in banners" :key="b.id" class="card overflow-hidden hover:shadow-md cursor-pointer" @click="edit(b)">
         <div class="bg-gradient-to-b from-ink-50 to-white p-6 flex justify-center">
           <div class="w-48 h-80 rounded-3xl bg-ink-900 p-2 shadow-xl relative">
