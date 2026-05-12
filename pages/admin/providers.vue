@@ -78,7 +78,7 @@ const webhookUrl = computed(() => `${useRuntimeConfig().public.supabaseUrl}/func
 async function load() {
   const [pr, ws] = await Promise.all([
     $supabase.from('email_providers').select('*').order('created_at', { ascending: false }),
-    $supabase.from('workspaces').select('id, name').order('name'),
+    $supabase.from('workspaces').select('id, name').or('environment.is.null,environment.neq.test').is('parent_workspace_id', null).order('name'),
   ])
   providers.value = pr.data || []
   workspaces.value = ws.data || []

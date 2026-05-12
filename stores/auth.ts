@@ -70,7 +70,7 @@ export const useAuthStore = defineStore('auth', {
         })()
       })
     },
-    async loadWorkspaces() {
+    async loadWorkspaces(opts?: { preferredPlanId?: string }) {
       const { $supabase } = useNuxtApp()
       const { data: owned } = await $supabase.from('workspaces').select('*').eq('owner_id', this.user.id)
       const { data: memberships } = await $supabase.from('workspace_members').select('workspace_id, role_id, workspaces:workspaces(*)').eq('user_id', this.user.id)
@@ -80,7 +80,18 @@ export const useAuthStore = defineStore('auth', {
       this.workspaces = unique
 
       if (!unique.length) {
-        await this.createWorkspace()
+        const { data: bootstrapped } = await $supabase.rpc('bootstrap_workspace_for_current_user', {
+          p_name: null,
+          p_plan_id: opts?.preferredPlanId ?? null,
+        })
+        if (bootstrapped) {
+          const { data: owned2 } = await $supabase.from('workspaces').select('*').eq('owner_id', this.user.id)
+          const { data: m2 } = await $supabase.from('workspace_members').select('workspace_id, role_id, workspaces:workspaces(*)').eq('user_id', this.user.id)
+          const joined2 = (m2 || []).map((m: any) => m.workspaces).filter(Boolean)
+          const merged = Array.from(new Map([...(owned2 || []), ...joined2].map((w: any) => [w.id, w])).values())
+          this.workspaces = merged
+          if (merged.length) await this.setActiveWorkspace(merged[0].id)
+        }
         return
       }
       const savedId = typeof window !== 'undefined' ? localStorage.getItem(LS_KEY) : null
@@ -126,26 +137,18 @@ export const useAuthStore = defineStore('auth', {
         }
       })()
     },
-    async createWorkspace(name?: string) {
+    async createWorkspace(name?: string, preferredPlanId?: string) {
       const { $supabase } = useNuxtApp()
-      const wsName = name || (this.user.email?.split('@')[0] + "'s Workspace")
-      const slug = `ws-${Math.random().toString(36).slice(2, 8)}`
-      const { data: ws, error } = await $supabase.from('workspaces').insert({
-        name: wsName, slug, owner_id: this.user.id, environment: 'production'
-      }).select().maybeSingle()
+      const { data: ws, error } = await $supabase.rpc('bootstrap_workspace_for_current_user', {
+        p_name: name ?? null,
+        p_plan_id: preferredPlanId ?? null,
+      })
       if (error) { console.error('createWorkspace error', error); throw error }
       if (!ws) return null
-      const { data: testWs } = await $supabase.from('workspaces').insert({
-        name: `${wsName} (Test)`,
-        slug: `${slug}-test`,
-        owner_id: this.user.id,
-        environment: 'test',
-        parent_workspace_id: ws.id,
-        brand_primary: ws.brand_primary,
-        brand_accent: ws.brand_accent,
-        demo_seeded: true,
-      }).select().maybeSingle()
-      this.workspaces = [...this.workspaces, ws, ...(testWs ? [testWs] : [])]
+      const { data: owned } = await $supabase.from('workspaces').select('*').eq('owner_id', this.user.id)
+      const { data: memberships } = await $supabase.from('workspace_members').select('workspace_id, role_id, workspaces:workspaces(*)').eq('user_id', this.user.id)
+      const joined = (memberships || []).map((m: any) => m.workspaces).filter(Boolean)
+      this.workspaces = Array.from(new Map([...(owned || []), ...joined].map((w: any) => [w.id, w])).values())
       await this.setActiveWorkspace(ws.id)
       return ws
     },
@@ -156,7 +159,7 @@ export const useAuthStore = defineStore('auth', {
       let target: any = null
       if (env === 'test') {
         target = this.workspaces.find((w: any) => w.parent_workspace_id === current.id && w.environment === 'test')
-        if (!target) {
+        if (!target && current.owner_id === this.user?.id) {
           const { $supabase } = useNuxtApp()
           const { data: testWs } = await $supabase.from('workspaces').insert({
             name: `${current.name} (Test)`,

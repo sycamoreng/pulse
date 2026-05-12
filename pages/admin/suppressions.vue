@@ -44,7 +44,7 @@ const reasonFilter = ref('')
 async function load() {
   const [s, ws] = await Promise.all([
     $supabase.from('email_suppressions').select('*').order('created_at', { ascending: false }).limit(500),
-    $supabase.from('workspaces').select('id, name'),
+    $supabase.from('workspaces').select('id, name').or('environment.is.null,environment.neq.test').is('parent_workspace_id', null),
   ])
   list.value = s.data || []
   workspaces.value = ws.data || []

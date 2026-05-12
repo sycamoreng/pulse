@@ -235,7 +235,7 @@
         <div class="card p-6">
           <div class="flex items-center justify-between mb-4">
             <div>
-              <div class="font-semibold text-ink-900">Roles & permissions</div>
+              <div class="font-semibold text-ink-900">Roles & permissions<PlanPill flag="custom_roles"/></div>
               <div class="text-xs text-ink-500">System roles gate common workflows. Create custom roles for finer-grained access.</div>
             </div>
             <button @click="openRole()" class="btn-primary" :disabled="!isOwner"><Icon name="plus"/>New role</button>
@@ -338,6 +338,13 @@
                     class="btn-secondary !py-1 !text-xs"
                     title="Copy a registration link to your clipboard">
                     <Icon name="copy" class="w-3 h-3"/>{{ inviteBusy[m.id] === 'copy' ? 'Working…' : 'Copy link' }}
+                  </button>
+                  <button
+                    v-if="isOwner && !m.activated_at"
+                    @click="editInviteEmail(m)"
+                    class="btn-ghost !py-1 !text-xs"
+                    title="Fix a mistyped invite email">
+                    <Icon name="edit" class="w-3 h-3"/>Edit email
                   </button>
                   <button v-if="isOwner" @click="removeMember(m)" class="text-ink-500 hover:text-red-600"><Icon name="trash"/></button>
                 </div>
@@ -531,53 +538,6 @@
         </div>
       </div>
 
-      <!-- Plan & usage -->
-      <div v-if="tab === 'plan'" class="space-y-4">
-        <div class="card p-6">
-          <div class="flex items-start justify-between">
-            <div>
-              <div class="text-xs uppercase tracking-wider text-ink-500">Current plan</div>
-              <div class="text-2xl font-bold text-ink-900 mt-1">{{ currentPlan?.name || 'Free' }}</div>
-              <div class="text-sm text-ink-500 mt-1">{{ currentPlan?.description }}</div>
-            </div>
-            <div class="text-right">
-              <div class="text-3xl font-bold text-ink-900">${{ currentPlan?.price_monthly || 0 }}<span class="text-base text-ink-500">/mo</span></div>
-              <a href="mailto:sales@pulse.app" class="btn-primary mt-2 inline-flex"><Icon name="send"/>Talk to sales</a>
-            </div>
-          </div>
-          <div class="grid grid-cols-3 gap-3 mt-6">
-            <div class="p-4 rounded-lg bg-ink-50">
-              <div class="text-xs text-ink-500">Email this month</div>
-              <div class="text-xl font-bold text-ink-900 mt-1">{{ (auth.workspace?.email_used_this_month || 0).toLocaleString() }} / {{ (emailCap).toLocaleString() }}</div>
-              <div class="h-2 rounded-full bg-ink-100 mt-2 overflow-hidden"><div class="h-full bg-brand-500" :style="{ width: pct(auth.workspace?.email_used_this_month || 0, emailCap) + '%' }"></div></div>
-            </div>
-            <div class="p-4 rounded-lg bg-ink-50">
-              <div class="text-xs text-ink-500">SMS this month</div>
-              <div class="text-xl font-bold text-ink-900 mt-1">{{ (auth.workspace?.sms_used_this_month || 0).toLocaleString() }} / {{ (smsCap).toLocaleString() }}</div>
-              <div class="h-2 rounded-full bg-ink-100 mt-2 overflow-hidden"><div class="h-full bg-accent-500" :style="{ width: pct(auth.workspace?.sms_used_this_month || 0, smsCap) + '%' }"></div></div>
-            </div>
-            <div class="p-4 rounded-lg bg-ink-50">
-              <div class="text-xs text-ink-500">Seats</div>
-              <div class="text-xl font-bold text-ink-900 mt-1">{{ members.length }} / {{ currentPlan?.seats || 1 }}</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div v-for="p in publicPlans" :key="p.id" class="card p-5" :class="p.id === auth.workspace?.plan_id ? 'border-brand-500 ring-2 ring-brand-500/20' : ''">
-            <div class="font-semibold text-ink-900">{{ p.name }}</div>
-            <div class="text-2xl font-bold text-ink-900 mt-2">${{ p.price_monthly }}<span class="text-xs text-ink-500">/mo</span></div>
-            <ul class="text-xs text-ink-500 mt-3 space-y-1.5">
-              <li>{{ p.email_monthly_quota.toLocaleString() }} emails/mo</li>
-              <li>{{ p.sms_monthly_quota.toLocaleString() }} SMS/mo</li>
-              <li>{{ p.seats }} seats</li>
-              <li v-if="p.feature_flags?.ab_testing">A/B testing</li>
-              <li v-if="p.feature_flags?.priority_support">Priority support</li>
-              <li v-if="p.feature_flags?.sso">SSO</li>
-            </ul>
-          </div>
-        </div>
-      </div>
 
       <!-- Audit log -->
       <div v-if="tab === 'audit'" class="card p-6">
@@ -668,6 +628,24 @@
       <template #footer>
         <button @click="inviteOpen = false" class="btn-secondary">Cancel</button>
         <button form="inv" type="submit" class="btn-primary">Add member</button>
+      </template>
+    </Modal>
+
+    <Modal v-model="editInviteOpen" title="Fix invite email" subtitle="Correct a mistyped address on a pending invite.">
+      <form id="editInvForm" @submit.prevent="submitEditInvite" class="space-y-3">
+        <div>
+          <label class="label">Current email</label>
+          <div class="text-sm text-ink-500 font-medium">{{ editInvite.original || '—' }}</div>
+        </div>
+        <div>
+          <label class="label">New email *</label>
+          <input v-model="editInvite.email" type="email" class="input" required autofocus/>
+        </div>
+        <div class="text-xs text-ink-500">If the user has already signed up with the corrected address, they'll be attached immediately. Otherwise the invite stays pending under the new email.</div>
+      </form>
+      <template #footer>
+        <button @click="editInviteOpen = false" type="button" class="btn-secondary" :disabled="editInvite.saving">Cancel</button>
+        <button form="editInvForm" type="submit" class="btn-primary" :disabled="editInvite.saving">{{ editInvite.saving ? 'Saving…' : 'Update email' }}</button>
       </template>
     </Modal>
 
@@ -796,7 +774,6 @@ const tabs = [
   { id: 'roles', label: 'Roles & approvals', icon: 'shield' },
   { id: 'team', label: 'Team', icon: 'users' },
   { id: 'policies', label: 'Messaging policies', icon: 'clock' },
-  { id: 'plan', label: 'Plan & usage', icon: 'box' },
   { id: 'data', label: 'Data & retention', icon: 'upload' },
   { id: 'audit', label: 'Audit log', icon: 'activity' },
   { id: 'account', label: 'Account', icon: 'box' },
@@ -896,12 +873,6 @@ const sendingPolicyBouncePct = computed({
 const exports = ref<any[]>([])
 const auditLogs = ref<any[]>([])
 const auditFilter = ref('')
-const plans = ref<any[]>([])
-const publicPlans = computed(() => plans.value.filter((p: any) => p.is_public).sort((a: any, b: any) => a.sort_order - b.sort_order))
-const currentPlan = computed(() => plans.value.find((p: any) => p.id === auth.workspace?.plan_id) || plans.value.find((p: any) => p.code === 'free'))
-const emailCap = computed(() => auth.workspace?.email_quota_override ?? currentPlan.value?.email_monthly_quota ?? 0)
-const smsCap = computed(() => auth.workspace?.sms_quota_override ?? currentPlan.value?.sms_monthly_quota ?? 0)
-function pct(n: number, cap: number) { return cap > 0 ? Math.min(100, Math.round((n / cap) * 100)) : 0 }
 const retentionDays = ref(365)
 const openExport = ref(false)
 const exportForm = reactive({ scope: 'customers', format: 'csv', note: '' })
@@ -1270,7 +1241,7 @@ async function loadAll() {
   if (!workspaceId.value) return
   loadingRoles.value = true
   loadingEmail.value = true
-  const [r, m, a, d, s, pol, ex, al, pls] = await Promise.all([
+  const [r, m, a, d, s, pol, ex, al] = await Promise.all([
     supabase.from('workspace_roles').select('*').eq('workspace_id', workspaceId.value).order('is_system', { ascending: false }).order('name'),
     supabase.from('workspace_members').select('*').eq('workspace_id', workspaceId.value),
     supabase.from('approvals').select('*').eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }).limit(20),
@@ -1279,7 +1250,6 @@ async function loadAll() {
     supabase.from('messaging_policies').select('*').eq('workspace_id', workspaceId.value),
     supabase.from('data_exports').select('*').eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }).limit(30),
     supabase.from('audit_logs').select('*').eq('workspace_id', workspaceId.value).order('created_at', { ascending: false }).limit(100),
-    supabase.from('plans').select('*').order('sort_order'),
   ])
   roles.value = r.data || []
   members.value = m.data || []
@@ -1290,7 +1260,6 @@ async function loadAll() {
   policies.value = POLICY_CHANNELS.map(ch => existing.find((x: any) => x.channel === ch) || defaultPolicy(ch))
   exports.value = ex.data || []
   auditLogs.value = al.data || []
-  plans.value = pls.data || []
   retentionDays.value = auth.workspace?.data_retention_days || 365
   const { data: sp } = await supabase.from('sending_policies').select('*').eq('workspace_id', workspaceId.value).maybeSingle()
   if (sp) Object.assign(sendingPolicy, sp)
@@ -1424,6 +1393,34 @@ async function updateMemberRole(m: any, roleId: string) {
   toast.success('Role updated')
   await loadAll()
 }
+const editInviteOpen = ref(false)
+const editInvite = reactive<{ id: string | null; original: string; email: string; saving: boolean }>({
+  id: null, original: '', email: '', saving: false,
+})
+
+function editInviteEmail(m: any) {
+  editInvite.id = m.id
+  editInvite.original = m.email || ''
+  editInvite.email = m.email || ''
+  editInvite.saving = false
+  editInviteOpen.value = true
+}
+
+async function submitEditInvite() {
+  if (!editInvite.id) return
+  const clean = editInvite.email.trim().toLowerCase()
+  if (!clean) { toast.error('Enter an email address'); return }
+  if (clean === editInvite.original.toLowerCase()) { editInviteOpen.value = false; return }
+  editInvite.saving = true
+  const { error } = await supabase.rpc('update_pending_invite_email', { p_member_id: editInvite.id, p_new_email: clean })
+  editInvite.saving = false
+  if (error) { toast.error('Could not update invite', error.message); return }
+  audit.log('update', 'invite_email', editInvite.id, clean, { from: editInvite.original })
+  toast.success('Invite email updated', `You can now resend the registration link to ${clean}.`)
+  editInviteOpen.value = false
+  await loadAll()
+}
+
 async function removeMember(m: any) {
   const ok = await confirmDialog.ask({ title: 'Remove this member?', message: 'They will lose access to this workspace immediately.', tone: 'danger', confirmText: 'Remove' })
   if (!ok) return
@@ -1610,6 +1607,13 @@ watch(workspaceId, async () => { await loadAll(); await loadPhase9() }, { immedi
 
 onMounted(async () => {
   const route = useRoute()
+  const tabQuery = route.query.tab as string | undefined
+  if (tabQuery === 'plan') {
+    const q = { ...route.query }
+    delete (q as any).tab
+    return navigateTo({ path: '/billing', query: q as any })
+  }
+  if (tabQuery && tabs.some(t => t.id === tabQuery)) tab.value = tabQuery
   const senderId = route.query.verify_sender as string | undefined
   const verifyToken = route.query.token as string | undefined
   if (senderId && verifyToken) {

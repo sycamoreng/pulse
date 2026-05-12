@@ -43,7 +43,7 @@ const planBreakdown = ref<any[]>([])
 onMounted(async () => {
   const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
   const [ws, sent, bounces, supp, plans] = await Promise.all([
-    $supabase.from('workspaces').select('id, plan_id', { count: 'exact', head: false }),
+    $supabase.from('workspaces').select('id, plan_id, environment, parent_workspace_id').or('environment.is.null,environment.neq.test').is('parent_workspace_id', null),
     $supabase.from('transactional_sends').select('id', { count: 'exact', head: true }).eq('status', 'sent').gte('created_at', since),
     $supabase.from('email_suppressions').select('id', { count: 'exact', head: true }).eq('reason', 'hard_bounce').gte('created_at', since),
     $supabase.from('email_suppressions').select('id', { count: 'exact', head: true }),

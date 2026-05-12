@@ -34,8 +34,23 @@ Deno.serve(async (req: Request) => {
     const workspace_id = String(body.workspace_id || '')
     const email = String(body.email || '').trim().toLowerCase()
     const mode = body.mode === 'copy' ? 'copy' : 'send'
-    const redirect_to = String(body.redirect_to || '')
     if (!workspace_id || !email) return json(400, { ok: false, error: 'workspace_id and email are required' })
+
+    const isLocal = (u: string) => /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|\/|$)/i.test(u)
+    const serverBase = (
+      Deno.env.get('NUXT_PUBLIC_APP_URL') ||
+      Deno.env.get('PULSE_SITE_URL') ||
+      ''
+    ).replace(/\/+$/, '')
+    const requestedRedirect = String(body.redirect_to || '')
+    let redirect_to = ''
+    if (serverBase && !isLocal(serverBase)) {
+      redirect_to = `${serverBase}/welcome`
+    } else if (requestedRedirect && !isLocal(requestedRedirect)) {
+      redirect_to = requestedRedirect
+    } else {
+      return json(400, { ok: false, error: 'No public app URL configured. Set NUXT_PUBLIC_APP_URL (or PULSE_SITE_URL) as an edge function secret to a non-localhost URL.' })
+    }
 
     const admin = createClient(url, service)
 

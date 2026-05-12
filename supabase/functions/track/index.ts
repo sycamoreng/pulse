@@ -70,6 +70,7 @@ Deno.serve(async (req: Request) => {
     if (!keyRow) return json({ error: "invalid api key" }, 401);
     if (keyRow.revoked_at) return json({ error: "key revoked" }, 401);
     if (keyRow.expires_at && new Date(keyRow.expires_at) < new Date()) return json({ error: "key expired" }, 401);
+    supabase.rpc("touch_api_key", { p_key_id: keyRow.id }).then(() => {}, () => {});
 
     if (keyRow.key_type === "publishable") {
       const host = originHost(req.headers.get("Origin") || req.headers.get("Referer"));
@@ -217,6 +218,53 @@ Deno.serve(async (req: Request) => {
         last_seen_at: nowIso(),
         revoked_at: null,
       }, { onConflict: "workspace_id,token" });
+      if (error) return json({ error: error.message }, 400);
+      return json({ ok: true });
+    }
+
+    if (path === "messages" && req.method === "GET") {
+      const externalId = url.searchParams.get("external_id") || "";
+      const placement = url.searchParams.get("placement") || "";
+      if (!externalId) return json({ error: "external_id required" }, 400);
+
+      const { data: customer } = await supabase.from("customers").select("id")
+        .eq("workspace_id", workspaceId).eq("external_id", externalId).maybeSingle();
+      if (!customer) return json({ ok: true, messages: [] });
+
+      let q = supabase.from("in_app_messages")
+        .select("id, placement, title, body, image_url, cta_label, cta_url, payload, seen_at, dismissed_at, clicked_at, expires_at, created_at")
+        .eq("workspace_id", workspaceId)
+        .eq("customer_id", customer.id)
+        .is("dismissed_at", null)
+        .or(`expires_at.is.null,expires_at.gt.${nowIso()}`)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (placement) q = q.eq("placement", placement);
+
+      const { data: messages, error } = await q;
+      if (error) return json({ error: error.message }, 400);
+      return json({ ok: true, messages: messages || [] });
+    }
+
+    if (path === "messages" && (req.method === "POST" || req.method === "PATCH")) {
+      const { id, external_id, action } = body as { id?: string; external_id?: string; action?: string };
+      if (!id || !external_id || !action) return json({ error: "id, external_id, action required" }, 400);
+      if (!["seen", "clicked", "dismissed"].includes(action)) return json({ error: "action must be seen|clicked|dismissed" }, 400);
+
+      const { data: customer } = await supabase.from("customers").select("id")
+        .eq("workspace_id", workspaceId).eq("external_id", external_id).maybeSingle();
+      if (!customer) return json({ error: "unknown customer" }, 404);
+
+      const patch: Record<string, string> = {};
+      if (action === "seen") patch.seen_at = nowIso();
+      if (action === "clicked") patch.clicked_at = nowIso();
+      if (action === "dismissed") patch.dismissed_at = nowIso();
+
+      const { error } = await supabase.from("in_app_messages")
+        .update(patch)
+        .eq("id", id)
+        .eq("workspace_id", workspaceId)
+        .eq("customer_id", customer.id);
       if (error) return json({ error: error.message }, 400);
       return json({ ok: true });
     }

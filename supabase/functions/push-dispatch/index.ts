@@ -133,7 +133,9 @@ async function apnsJwt(teamId: string, keyId: string, p8: string) {
 }
 async function sendApns(deviceToken: string, title: string, body: string, app: any) {
   const jwt = await apnsJwt(app.apns_team_id, app.apns_key_id, app.apns_p8);
-  const host = "https://api.push.apple.com"; // prod; use api.sandbox.push.apple.com for dev
+  const host = app.apns_environment === "sandbox"
+    ? "https://api.sandbox.push.apple.com"
+    : "https://api.push.apple.com";
   const res = await fetch(`${host}/3/device/${deviceToken}`, {
     method: "POST",
     headers: {

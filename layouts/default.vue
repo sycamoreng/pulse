@@ -56,13 +56,13 @@
 
         <div class="px-3 pt-4 pb-1 text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Analytics</div>
         <NuxtLink to="/events" class="nav-link" active-class="nav-link-active"><Icon name="activity"/>Events</NuxtLink>
-        <NuxtLink to="/funnels" class="nav-link" active-class="nav-link-active"><Icon name="filter"/>Funnels</NuxtLink>
-        <NuxtLink to="/cohorts" class="nav-link" active-class="nav-link-active"><Icon name="layers"/>Cohorts</NuxtLink>
-        <NuxtLink to="/rfm" class="nav-link" active-class="nav-link-active"><Icon name="trending"/>RFM Analysis</NuxtLink>
+        <NuxtLink to="/funnels" class="nav-link" active-class="nav-link-active"><Icon name="filter"/>Funnels<PlanPill flag="funnels"/></NuxtLink>
+        <NuxtLink to="/cohorts" class="nav-link" active-class="nav-link-active"><Icon name="layers"/>Cohorts<PlanPill flag="cohorts"/></NuxtLink>
+        <NuxtLink to="/rfm" class="nav-link" active-class="nav-link-active"><Icon name="trending"/>RFM Analysis<PlanPill flag="rfm"/></NuxtLink>
         <NuxtLink v-if="auth.workspace?.commerce_enabled" to="/products" class="nav-link" active-class="nav-link-active"><Icon name="box"/>Products</NuxtLink>
 
         <div class="px-3 pt-4 pb-1 text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Intelligence</div>
-        <NuxtLink to="/intelligence" class="nav-link" active-class="nav-link-active"><Icon name="flask" class="text-ai-500"/>Signals &amp; AI<span class="ml-auto text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-ai-50 text-ai-700">AI</span></NuxtLink>
+        <NuxtLink to="/intelligence" class="nav-link" active-class="nav-link-active"><Icon name="flask" class="text-ai-500"/>Signals &amp; AI<span v-if="hasFeature('predictive')" class="ml-auto text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-ai-50 text-ai-700">AI</span><PlanPill v-else flag="predictive"/></NuxtLink>
 
         <div class="px-3 pt-4 pb-1 text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Engagement</div>
         <NuxtLink to="/campaigns" class="nav-link" active-class="nav-link-active"><Icon name="send"/>Campaigns</NuxtLink>
@@ -74,8 +74,9 @@
 
         <div class="px-3 pt-4 pb-1 text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Settings</div>
         <NuxtLink to="/apps" class="nav-link" active-class="nav-link-active"><Icon name="box"/>Apps & SDKs</NuxtLink>
-        <NuxtLink to="/integrations" class="nav-link" active-class="nav-link-active"><Icon name="layers"/>Integrations</NuxtLink>
-        <NuxtLink to="/trust" class="nav-link" active-class="nav-link-active"><Icon name="shield"/>Trust & Premium</NuxtLink>
+        <NuxtLink to="/integrations" class="nav-link" active-class="nav-link-active"><Icon name="layers"/>Integrations<PlanPill flag="commerce_integrations"/></NuxtLink>
+        <NuxtLink to="/trust" class="nav-link" active-class="nav-link-active"><Icon name="shield"/>Trust & Premium<PlanPill flag="audit_export"/></NuxtLink>
+        <NuxtLink to="/billing" class="nav-link" active-class="nav-link-active"><Icon name="box"/>Billing &amp; plans</NuxtLink>
         <NuxtLink to="/settings" class="nav-link" active-class="nav-link-active"><Icon name="settings"/>Settings</NuxtLink>
       </nav>
 
@@ -143,6 +144,7 @@
 import { useAuthStore } from '~/stores/auth'
 import pulseIcon from '~/assets/pulse-app-icon.svg'
 const auth = useAuthStore()
+const { hasFeature } = usePlanGating()
 const role = useRole()
 const theme = useTheme()
 const { supabase } = useWorkspace()

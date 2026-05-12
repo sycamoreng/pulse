@@ -120,6 +120,9 @@ Deno.serve(async (req: Request) => {
         } else if (item.channel === "sms" || item.channel === "whatsapp" || item.channel === "rcs") {
           const r = await invoke(sb, "sms-dispatch", { ...(item.payload || {}), workspace_id: item.workspace_id, channel: item.channel });
           ok = r.ok; err = r.error || "";
+        } else if (item.channel === "in_app") {
+          const r = await invoke(sb, "in-app-dispatch", { ...(item.payload || {}), workspace_id: item.workspace_id });
+          ok = r.ok; err = r.error || "";
         } else {
           ok = false; err = `Unsupported channel: ${item.channel}`;
         }

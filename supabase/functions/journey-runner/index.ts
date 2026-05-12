@@ -172,7 +172,7 @@ async function processNode(
     return { next: edge?.to, branch_taken: branch };
   }
 
-  if (["email", "push", "sms", "whatsapp"].includes(node.kind)) {
+  if (["email", "push", "sms", "whatsapp", "in_app"].includes(node.kind)) {
     // Enqueue a real delivery. Test-mode workspaces skip.
     const { data: ws } = await sb.from("workspaces").select("environment").eq("id", journey.workspace_id).maybeSingle();
     if (ws?.environment !== "test") {
@@ -185,10 +185,15 @@ async function processNode(
         next_attempt_at: new Date().toISOString(),
         payload: {
           kind: "journey",
-          title: data.subject || data.body?.slice(0, 40) || "Message",
+          title: data.subject || data.title || data.body?.slice(0, 40) || "Message",
           body: data.body || "",
           to_email: node.kind === "email" ? customer.email : undefined,
           to_user_id: customer.id,
+          placement: node.kind === "in_app" ? (data.placement || "inbox") : undefined,
+          image_url: data.image_url,
+          cta_label: data.cta_label,
+          cta_url: data.cta_url,
+          journey_id: journey.id,
         },
       });
     }

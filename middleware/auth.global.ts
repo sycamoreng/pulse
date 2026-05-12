@@ -40,4 +40,17 @@ export default defineNuxtRouteMiddleware(async (to) => {
   // Tenant routes
   if (!isAuthed && !tenantPublic.includes(to.path)) return navigateTo('/login')
   if (isAuthed && (to.path === '/login' || to.path === '/signup' || to.path === '/')) return navigateTo('/dashboard')
+
+  // Plan gating: block pages whose feature flag isn't enabled on the active plan.
+  if (isAuthed && auth.workspace?.id && !['/settings', '/dashboard', '/billing'].includes(to.path)) {
+    const { ROUTE_FEATURE } = await import('~/composables/usePlanGating')
+    const flag = (ROUTE_FEATURE as Record<string, string>)[to.path]
+    if (flag) {
+      const ent = useEntitlements()
+      if (!ent.loaded.value) { try { await ent.load() } catch {} }
+      if (ent.features.value?.[flag] !== true) {
+        return navigateTo(`/billing?blocked=${encodeURIComponent(flag)}`)
+      }
+    }
+  }
 })
