@@ -54,19 +54,30 @@ Deno.serve(async (req: Request) => {
 
     const admin = createClient(url, service)
 
-    const { data: member, error: memErr } = await admin
-      .from('workspace_members')
-      .select('id, role, role_id')
-      .eq('workspace_id', workspace_id)
-      .eq('user_id', userData.user.id)
+    const { data: ws } = await admin
+      .from('workspaces')
+      .select('name, owner_id')
+      .eq('id', workspace_id)
       .maybeSingle()
-    if (memErr) return json(500, { ok: false, error: memErr.message })
-    if (!member || !['owner', 'admin'].includes(String(member.role))) {
+    if (!ws) return json(404, { ok: false, error: 'workspace not found' })
+
+    const isOwner = ws.owner_id === userData.user.id
+    let isAdminMember = false
+    if (!isOwner) {
+      const { data: member, error: memErr } = await admin
+        .from('workspace_members')
+        .select('id, role')
+        .eq('workspace_id', workspace_id)
+        .eq('user_id', userData.user.id)
+        .maybeSingle()
+      if (memErr) return json(500, { ok: false, error: memErr.message })
+      isAdminMember = !!member && ['owner', 'admin'].includes(String(member.role))
+    }
+    if (!isOwner && !isAdminMember) {
       return json(403, { ok: false, error: 'only workspace admins can send registration links' })
     }
 
-    const { data: ws } = await admin.from('workspaces').select('name').eq('id', workspace_id).maybeSingle()
-    const workspaceName = ws?.name || 'your workspace'
+    const workspaceName = ws.name || 'your workspace'
 
     let actionLink: string | null = null
     let linkKind: 'invite' | 'magiclink' = 'invite'
