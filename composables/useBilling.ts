@@ -87,7 +87,7 @@ export function useBilling() {
       auth.workspace = data
       auth.workspaces = auth.workspaces.map((w: any) => (w.id === data.id ? data : w))
     }
-    await load()
+    await Promise.all([load(), useEntitlements().load(true)])
     return { ok: true }
   }
 

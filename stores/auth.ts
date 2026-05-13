@@ -70,7 +70,7 @@ export const useAuthStore = defineStore('auth', {
         })()
       })
     },
-    async loadWorkspaces(opts?: { preferredPlanId?: string }) {
+    async loadWorkspaces(opts?: { preferredPlanId?: string; bootstrapIfMissing?: boolean }) {
       const { $supabase } = useNuxtApp()
       const { data: owned } = await $supabase.from('workspaces').select('*').eq('owner_id', this.user.id)
       const { data: memberships } = await $supabase.from('workspace_members').select('workspace_id, role_id, workspaces:workspaces(*)').eq('user_id', this.user.id)
@@ -80,8 +80,12 @@ export const useAuthStore = defineStore('auth', {
       this.workspaces = unique
 
       if (!unique.length) {
+        // Only bootstrap a workspace when the caller explicitly asks (signup / onboarding flow).
+        // Logging in without a workspace must NOT silently provision one - that creates ghost
+        // tenants for accounts that only exist for platform admin or pending invites.
+        if (!opts?.bootstrapIfMissing) return
         const { data: bootstrapped } = await $supabase.rpc('bootstrap_workspace_for_current_user', {
-          p_name: null,
+          p_name: opts?.preferredPlanId ? null : null,
           p_plan_id: opts?.preferredPlanId ?? null,
         })
         if (bootstrapped) {

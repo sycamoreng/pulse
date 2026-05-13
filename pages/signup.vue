@@ -91,6 +91,8 @@ const plans = ref<any[]>([])
 const selectedPlanId = ref<string>('')
 
 onMounted(async () => {
+  await auth.init()
+  if (auth.user) email.value = auth.user.email || ''
   const { data } = await $supabase.from('plans').select('*').eq('is_public', true).order('sort_order')
   plans.value = data || []
   const free = plans.value.find((p: any) => p.code === 'free') || plans.value[0]
@@ -134,12 +136,14 @@ const planHighlights = computed(() => {
 
 async function submit() {
   loading.value = true; error.value = ''
-  const { data, error: err } = await $supabase.auth.signUp({ email: email.value, password: password.value })
-  if (err) { loading.value = false; error.value = err.message; return }
-  if (data.user) {
-    auth.user = data.user
+  if (!auth.user) {
+    const { data, error: err } = await $supabase.auth.signUp({ email: email.value, password: password.value })
+    if (err) { loading.value = false; error.value = err.message; return }
+    if (data.user) auth.user = data.user
+  }
+  if (auth.user) {
     try {
-      await auth.loadWorkspaces({ preferredPlanId: selectedPlanId.value || undefined })
+      await auth.loadWorkspaces({ preferredPlanId: selectedPlanId.value || undefined, bootstrapIfMissing: true })
     } catch (e: any) {
       loading.value = false
       error.value = e?.message || 'Could not provision your workspace. Please retry.'
@@ -149,4 +153,5 @@ async function submit() {
   loading.value = false
   await navigateTo('/dashboard')
 }
+
 </script>

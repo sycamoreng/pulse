@@ -64,7 +64,10 @@ export function useEntitlements() {
 
   const subscriptionStatus = computed(() => auth.workspace?.subscription_status || 'active')
 
-  watch(() => auth.workspace?.id, () => { loaded.value = false; void load() })
+  watch(
+    () => [auth.workspace?.id, auth.workspace?.plan_id, auth.workspace?.subscription_status],
+    () => { loaded.value = false; void load(true) },
+  )
 
   return { features, limits, plan, trial, subscriptionStatus, load, can, loaded }
 }

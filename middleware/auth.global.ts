@@ -39,7 +39,16 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   // Tenant routes
   if (!isAuthed && !tenantPublic.includes(to.path)) return navigateTo('/login')
-  if (isAuthed && (to.path === '/login' || to.path === '/signup' || to.path === '/')) return navigateTo('/dashboard')
+  if (isAuthed && (to.path === '/login' || to.path === '/signup' || to.path === '/')) {
+    return navigateTo(auth.workspace?.id ? '/dashboard' : '/signup')
+  }
+
+  // Authed user with no workspace (e.g. signed in via /admin without a tenant, or pending state):
+  // keep them out of tenant pages entirely. Send to /signup so they can complete onboarding,
+  // unless they're on a public page already.
+  if (isAuthed && !auth.workspace?.id && !tenantPublic.includes(to.path)) {
+    return navigateTo('/signup')
+  }
 
   // Plan gating: block pages whose feature flag isn't enabled on the active plan.
   if (isAuthed && auth.workspace?.id && !['/settings', '/dashboard', '/billing'].includes(to.path)) {
